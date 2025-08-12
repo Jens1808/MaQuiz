@@ -1,33 +1,62 @@
 import React, { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-export default function App() {
-  const [email, setEmail] = useState('')
-  const [message, setMessage] = useState('')
+const asEmail = (name) => `${name.trim().toUpperCase()}@quiz.local`
 
-  async function handleLogin(e) {
+export default function App() {
+  const [name, setName] = useState('')
+  const [pwd, setPwd] = useState('')
+  const [first, setFirst] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function handleSubmit(e) {
     e.preventDefault()
-    const { error } = await supabase.auth.signInWithOtp({ email })
-    if (error) {
-      setMessage(error.message)
-    } else {
-      setMessage('Login-Link wurde gesendet! Bitte prüfe deine E-Mails.')
+    setMsg('')
+    const email = asEmail(name)
+
+    // Erstes Login? -> Account anlegen, sonst normales Sign-In
+    if (first) {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password: pwd,
+        options: { data: { role: 'user' } }
+      })
+      if (error) { setMsg(error.message); return }
     }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd })
+    if (error) {
+      // Wenn Nutzer noch nicht existiert oder PW falsch -> Umschalten auf Erstpasswort
+      if (/invalid login|user not found|email not confirmed/i.test(error.message)) {
+        setFirst(true)
+      } else {
+        setMsg(error.message)
+      }
+      return
+    }
+    setMsg(`Angemeldet als ${data.user.email}`)
   }
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-      <h1>Willkommen bei MaQuiz</h1>
-      <form onSubmit={handleLogin}>
+    <div style={{ padding: 24, fontFamily: 'system-ui, Arial' }}>
+      <h1>MaQuiz – Login</h1>
+      <form onSubmit={handleSubmit} style={{ display:'grid', gap:12, maxWidth:360 }}>
         <input
-          type="email"
-          placeholder="E-Mail"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Benutzername (z. B. ADMIN, BEA …)"
+          value={name}
+          onChange={(e)=>setName(e.target.value)}
+          required
         />
-        <button type="submit">Login-Link senden</button>
+        <input
+          type="password"
+          placeholder={first? 'Neues Passwort' : 'Passwort'}
+          value={pwd}
+          onChange={(e)=>setPwd(e.target.value)}
+          required
+        />
+        <button>{first? 'Konto anlegen & einloggen' : 'Einloggen'}</button>
       </form>
-      {message && <p>{message}</p>}
+      {msg && <p style={{ marginTop:12 }}>{msg}</p>}
     </div>
   )
 }
