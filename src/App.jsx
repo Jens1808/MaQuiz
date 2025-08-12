@@ -14,19 +14,15 @@ export default function App() {
     setMsg('')
     const email = asEmail(name)
 
-    // Erstes Login? -> Account anlegen, sonst normales Sign-In
     if (first) {
       const { error } = await supabase.auth.signUp({
-        email,
-        password: pwd,
-        options: { data: { role: 'user' } }
+        email, password: pwd, options: { data: { role: 'user' } }
       })
       if (error) { setMsg(error.message); return }
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd })
     if (error) {
-      // Wenn Nutzer noch nicht existiert oder PW falsch -> Umschalten auf Erstpasswort
       if (/invalid login|user not found|email not confirmed/i.test(error.message)) {
         setFirst(true)
       } else {
@@ -41,22 +37,11 @@ export default function App() {
     <div style={{ padding: 24, fontFamily: 'system-ui, Arial' }}>
       <h1>MaQuiz – Login</h1>
       <form onSubmit={handleSubmit} style={{ display:'grid', gap:12, maxWidth:360 }}>
-        <input
-          placeholder="Benutzername (z. B. ADMIN, BEA …)"
-          value={name}
-          onChange={(e)=>setName(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder={first? 'Neues Passwort' : 'Passwort'}
-          value={pwd}
-          onChange={(e)=>setPwd(e.target.value)}
-          required
-        />
+        <input placeholder="Benutzername (z. B. ADMIN, BEA …)" value={name} onChange={e=>setName(e.target.value)} required />
+        <input type="password" placeholder={first? 'Neues Passwort' : 'Passwort'} value={pwd} onChange={e=>setPwd(e.target.value)} required />
         <button>{first? 'Konto anlegen & einloggen' : 'Einloggen'}</button>
       </form>
-      {msg && <p style={{ marginTop:12 }}>{msg}</p>}
+      {msg && <p style={{marginTop:12}}>{msg}</p>}
     </div>
   )
 }
