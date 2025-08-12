@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-const asEmail = (name) => `${name.trim().toUpperCase()}@quiz.local`
-
+const asEmail = (name) => {
+  const s = name.trim()
+  return s.includes('@') ? s : `${s.toUpperCase()}@quiz.local`
+}
 export default function App() {
   const [name, setName] = useState('')
   const [pwd, setPwd] = useState('')
