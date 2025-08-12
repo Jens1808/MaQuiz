@@ -1,0 +1,132 @@
+:root{
+  --brand-yellow:#FFD200;     /* Sonne */
+  --brand-blue:#003A8C;       /* tiefes Blau */
+  --brand-blue-2:#0A2F66;     /* sekundär */
+  --ink:#0B0F19;
+  --muted:#6B7280;
+  --bg:#0B1220;               /* dunkelblauer Hintergrund */
+  --card:#111927;
+  --card-2:#0E1726;
+  --border:#1F2A3A;
+  --success:#16a34a;
+  --danger:#dc2626;
+  --ring: rgba(255,210,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color:#EEF2F6;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(255,210,0,.12), transparent 55%),
+    radial-gradient(1000px 500px at -10% 0%, rgba(0,58,140,.25), transparent 50%),
+    var(--bg);
+}
+
+.container{
+  min-height:100dvh;
+  display:grid;
+  place-items:start center;
+  padding:28px 16px 48px;
+}
+
+.header{
+  display:flex; align-items:center; gap:12px; margin:0 0 18px;
+}
+.logo{
+  width:36px;height:36px;border-radius:50%;
+  background: radial-gradient(circle at 50% 50%, var(--brand-yellow) 0 55%, rgba(0,0,0,.15) 56% 100%);
+  box-shadow: 0 0 0 3px rgba(255,210,0,.2), 0 10px 30px rgba(255,210,0,.18);
+}
+.title{font-size:22px;font-weight:700;letter-spacing:.2px}
+
+.card{
+  width:min(100%, 960px);
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:18px 18px 22px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+}
+
+.subtle{color:var(--muted)}
+hr.sep{
+  border:0; height:1px; background:linear-gradient(90deg, transparent, #243244 25%, #243244 75%, transparent);
+  margin:16px 0 12px;
+}
+
+.grid{display:grid; gap:12px}
+.row{display:flex; align-items:center; gap:12px}
+.row.split{justify-content:space-between}
+
+input, button{
+  font:inherit;
+}
+input{
+  width:100%;
+  padding:12px 12px;
+  color:#E9EEF4;
+  background:#0c1524;
+  border:1px solid #223047;
+  border-radius:10px;
+  outline:none;
+  transition:.15s ease;
+}
+input::placeholder{color:#8FA2BD}
+input:focus{
+  border-color:var(--brand-yellow);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.btn{
+  inline-size:fit-content;
+  padding:12px 14px; border-radius:10px;
+  font-weight:700; letter-spacing:.2px;
+  cursor:pointer; border:1px solid transparent;
+  transition:transform .04s ease, box-shadow .15s ease, background .15s ease;
+}
+.btn:active{ transform: translateY(1px); }
+
+.btn-primary{
+  background: linear-gradient(180deg, var(--brand-yellow), #f4c700);
+  color:#1d1d1d;
+  box-shadow: 0 10px 24px rgba(255,210,0,.25);
+}
+.btn-primary:hover{ filter: brightness(0.98); }
+.btn-secondary{
+  background: #0f1c32; color:#e5ecf5; border-color:#223047;
+}
+.btn-link{
+  background:transparent; color:var(--brand-yellow);
+  border-color:transparent; text-decoration:underline; text-underline-offset:2px;
+}
+
+.kpi{
+  display:flex; gap:10px; align-items:center; font-weight:600
+}
+.kpi .dot{width:10px;height:10px;border-radius:50%;background:var(--brand-yellow); box-shadow:0 0 0 3px rgba(255,210,0,.25)}
+.badge{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 10px; border:1px solid #233146; border-radius:999px; background:#0d1a2d; color:#c8d6ea;
+}
+
+.q{
+  border:1px solid #223047; border-radius:12px; padding:12px; background:#0c1524;
+}
+.qhead{display:flex; align-items:center; gap:10px; margin-bottom:8px; font-weight:600}
+.qnum{
+  display:inline-grid; place-items:center; width:26px;height:26px; border-radius:999px;
+  background: var(--brand-blue); color:#fff; font-size:13px; font-weight:700;
+  box-shadow: 0 0 0 2px rgba(255,210,0,.25);
+}
+
+.table{
+  border:1px solid #1f2a3a; border-radius:12px; overflow:auto; background:#0c1524;
+}
+.table table{width:100%; border-collapse:collapse}
+.table th, .table td{padding:10px 12px; border-bottom:1px solid #1f2a3a; text-align:left}
+.table th{color:#98a9c2; font-weight:600}
+code{background:#0d1a2d; padding:2px 6px; border-radius:6px; border:1px solid #233146}
+.success{color:var(--success)} .danger{color:var(--danger)}
