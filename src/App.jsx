@@ -1,272 +1,177 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from './supabaseClient';
+import React, { useEffect, useMemo, useState } from 'react'
+import { supabase } from './supabaseClient'
 
-const asEmail = (nameOrMail) => {
-  const s = nameOrMail.trim();
-  return s.includes('@') ? s : `${s.toUpperCase()}@quiz.local`;
-};
+const asEmail = (name) => {
+  const s = name.trim()
+  return s.includes('@') ? s : `${s.toUpperCase()}@quiz.local`
+}
 
-export default function App() {
-  const [name, setName] = useState('');
-  const [pwd, setPwd] = useState('');
-  const [first, setFirst] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [user, setUser] = useState(null);
+function Login({ onLogin }) {
+  const [name, setName] = useState('')
+  const [pwd, setPwd] = useState('')
+  const [first, setFirst] = useState(false)
+  const [msg, setMsg] = useState('')
 
-  const [loading, setLoading] = useState(false);
-  const [questions, setQuestions] = useState([]);
-  const [answers, setAnswers] = useState({});
-  const [attemptId, setAttemptId] = useState(null);
-  const [result, setResult] = useState(null);
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setMsg('')
+    const email = asEmail(name)
 
-  // Session wiederherstellen
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setUser(data.session.user);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  // Nach Login: Versuch + Fragen
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      setMsg('');
-      setLoading(true);
-      try {
-        const { data: attempt, error: aErr } = await supabase
-          .from('quiz_attempts')
-          .insert({ user_id: user.id })
-          .select()
-          .single();
-        if (aErr) throw aErr;
-        setAttemptId(attempt.id);
-
-        const { data: qs, error: qErr } = await supabase
-          .rpc('get_random_questions', { limit_count: 20 });
-        if (qErr) throw qErr;
-
-        setQuestions(qs ?? []);
-        setAnswers({});
-        setResult(null);
-      } catch (e) {
-        setMsg(`Fehler beim Laden: ${e.message}`);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
-
-  async function handleSubmitLogin(e) {
-    e.preventDefault();
-    setMsg('');
-    const email = asEmail(name);
-
-    try {
-      setLoading(true);
-      if (first) {
-        const { error: sErr } = await supabase.auth.signUp({
-          email, password: pwd, options: { data: { role: 'user' } }
-        });
-        if (sErr) {
-          setMsg(`SignUp: ${sErr.message}`);
-          setLoading(false);
-          return;
-        }
-      }
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd });
-      if (error) {
-        const m = error.message.toLowerCase();
-        if (m.includes('invalid login') || m.includes('user not found') || m.includes('email not confirmed')) {
-          setFirst(true);
-        } else {
-          setMsg(`Login: ${error.message}`);
-        }
-        return;
-      }
-      setMsg(`Angemeldet als ${data.user.email}`);
-    } catch (err) {
-      setMsg(`Netzwerk: ${String(err)}`);
-    } finally {
-      setLoading(false);
+    if (first) {
+      const { error } = await supabase.auth.signUp({
+        email, password: pwd, options: { data: { role: 'user' } }
+      })
+      if (error) { setMsg(error.message); return }
     }
-  }
-
-  const allAnswered = useMemo(() => {
-    if (!questions.length) return false;
-    return questions.every(q => (answers[q.id] ?? '').trim().length > 0);
-  }, [questions, answers]);
-
-  async function submitQuiz() {
-    if (!user || !attemptId) return;
-    setLoading(true);
-    setMsg('');
-    try {
-      let correct = 0;
-      const rows = [];
-
-      for (const q of questions) {
-        const given = (answers[q.id] ?? '').trim();
-        const { data: ok, error: cErr } = await supabase
-          .rpc('check_answer', { q_id: q.id, user_answer: given });
-        if (cErr) throw cErr;
-        if (ok) correct += 1;
-        rows.push({ attempt_id: attemptId, question_id: q.id, given_answer: given, is_correct: !!ok });
-      }
-
-      const { error: insErr } = await supabase.from('quiz_answers').insert(rows);
-      if (insErr) throw insErr;
-
-      const { error: updErr } = await supabase
-        .from('quiz_attempts')
-        .update({ score: correct, finished_at: new Date().toISOString() })
-        .eq('id', attemptId);
-      if (updErr) throw updErr;
-
-      const wrong = rows.filter(r => !r.is_correct).map(r => r.question_id);
-      setResult({ total: questions.length, correct, wrongIds: new Set(wrong) });
-    } catch (e) {
-      setMsg(`Fehler beim Auswerten: ${e.message}`);
-    } finally {
-      setLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd })
+    if (error) {
+      if (/invalid login|user not found|email not confirmed/i.test(error.message)) {
+        setFirst(true)
+      } else setMsg(error.message)
+      return
     }
+    onLogin(data.user)
   }
-
-  async function restart() {
-    if (!user) return;
-    setQuestions([]); setAnswers({}); setAttemptId(null); setResult(null);
-    setLoading(true);
-    try {
-      const { data: attempt } = await supabase
-        .from('quiz_attempts')
-        .insert({ user_id: user.id })
-        .select().single();
-      setAttemptId(attempt.id);
-      const { data: qs } = await supabase.rpc('get_random_questions', { limit_count: 20 });
-      setQuestions(qs ?? []);
-    } finally { setLoading(false); }
-  }
-
-  const logout = async () => { await supabase.auth.signOut(); };
 
   return (
-    <div className="container">
-      <div className="card">
-        <div className="header">
-          <div className="logo" aria-hidden="true"></div>
-          <div className="title">MaQuiz</div>
-          <div style={{marginLeft:'auto'}} className="badge">
-            <span className="dot"></span>
-            <span>Merkur‑Style</span>
-          </div>
+    <div style={{ padding: 24, fontFamily: 'system-ui, Arial', maxWidth: 420 }}>
+      <h1>MaQuiz – Login</h1>
+      <form onSubmit={handleSubmit} style={{ display:'grid', gap:12 }}>
+        <input placeholder="Benutzername (z. B. ADMIN, BEA …) oder E‑Mail"
+               value={name} onChange={e=>setName(e.target.value)} required />
+        <input type="password" placeholder={first? 'Neues Passwort' : 'Passwort'}
+               value={pwd} onChange={e=>setPwd(e.target.value)} required />
+        <button>{first? 'Konto anlegen & einloggen' : 'Einloggen'}</button>
+      </form>
+      {msg && <p style={{marginTop:12, color:'#c00'}}>{msg}</p>}
+    </div>
+  )
+}
+
+function Card({ children }) {
+  return (
+    <div style={{
+      background:'#0f172a', border:'1px solid #334155', borderRadius:16,
+      padding:16, boxShadow:'0 10px 30px rgba(0,0,0,.25)'
+    }}>{children}</div>
+  )
+}
+
+export default function App() {
+  const [user, setUser] = useState(null)
+  const [questions, setQuestions] = useState([])
+  const [choices, setChoices] = useState({}) // id -> selected index
+  const [status, setStatus] = useState('idle') // idle | loading | grading | done
+  const [result, setResult] = useState(null)
+  const isAdmin = useMemo(() => user?.app_metadata?.role === 'admin', [user])
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null))
+  }, [])
+
+  async function loadQuestions() {
+    setStatus('loading')
+    const { data, error } = await supabase.rpc('get_random_questions_mc', { limit_count: 20 })
+    if (error) { console.error(error); setStatus('idle'); return }
+    setQuestions(data || [])
+    setChoices({})
+    setStatus('idle')
+  }
+
+  useEffect(() => {
+    if (user) loadQuestions()
+  }, [user])
+
+  function setChoice(qid, idx) {
+    setChoices(prev => ({ ...prev, [qid]: idx }))
+  }
+
+  async function submit() {
+    const answers = questions.map(q => ({
+      question_id: q.id,
+      selected_idx: Number.isInteger(choices[q.id]) ? choices[q.id] : -1
+    }))
+    setStatus('grading')
+    const { data, error } = await supabase.rpc('grade_attempt_mc', { answers })
+    if (error) { console.error(error); setStatus('idle'); return }
+    setResult(data)
+    setStatus('done')
+  }
+
+  async function logout() {
+    await supabase.auth.signOut()
+    setUser(null)
+    setQuestions([])
+    setChoices({})
+    setResult(null)
+  }
+
+  return !user ? (
+    <Login onLogin={setUser} />
+  ) : (
+    <div style={{
+      minHeight:'100dvh',
+      padding:24,
+      fontFamily:'system-ui, Arial',
+      color:'#e2e8f0',
+      background:'radial-gradient(1200px 700px at 20% 0%, #1f2937, #0b1220)'
+    }}>
+      <div style={{maxWidth:900, margin:'0 auto', display:'grid', gap:16}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+          <h1 style={{display:'flex', gap:12, alignItems:'center'}}>
+            <span style={{
+              width:18, height:18, borderRadius:'50%', background:'#ffd700',
+              boxShadow:'0 0 20px #ffd700aa'
+            }} />
+            MaQuiz {isAdmin && <small style={{marginLeft:8, color:'#94a3b8'}}>(Admin)</small>}
+          </h1>
+          <button onClick={logout}>Abmelden</button>
         </div>
 
-        {!user && (
-          <>
-            <p className="subtle">Bitte anmelden, um das Quiz zu starten.</p>
-            <form onSubmit={handleSubmitLogin} className="grid" style={{maxWidth:440}}>
-              <input
-                placeholder="Benutzername (z. B. ADMIN, BEA …) oder E‑Mail"
-                value={name}
-                onChange={(e)=>setName(e.target.value)}
-                required
-              />
-              <input
-                type="password"
-                placeholder={first? 'Neues Passwort' : 'Passwort'}
-                value={pwd}
-                onChange={(e)=>setPwd(e.target.value)}
-                required
-              />
-              <div className="row">
-                <button className="btn btn-primary" disabled={loading}>
-                  {first? 'Konto anlegen & einloggen' : 'Einloggen'}
-                </button>
-              </div>
-              {msg && <p className="subtle" style={{color:'#ffd200'}}>{msg}</p>}
-            </form>
-          </>
-        )}
+        <Card>
+          <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+            <strong>20 Zufallsfragen (Multiple Choice)</strong>
+            <button onClick={loadQuestions} disabled={status==='loading'}>Neu ziehen</button>
+          </div>
+          <div style={{marginTop:8, color:'#94a3b8'}}>{questions.length} geladen</div>
+        </Card>
 
-        {user && (
-          <>
-            <div className="row split" style={{marginBottom:10}}>
-              <div className="subtle">Angemeldet als <b style={{color:'#e9eef6'}}>{user.email}</b></div>
-              <button className="btn btn-link" onClick={logout}>Abmelden</button>
+        {questions.map((q, i) => (
+          <Card key={q.id}>
+            <div style={{display:'grid', gap:10}}>
+              <div style={{fontWeight:600}}>{i+1}. {q.text}</div>
+              <div style={{display:'grid', gap:8}}>
+                {(q.options || []).map((opt, idx) => (
+                  <label key={idx} style={{
+                    display:'flex', alignItems:'center', gap:10,
+                    padding:'8px 10px', border:'1px solid #334155', borderRadius:12,
+                    background: (choices[q.id]===idx)?'#1e293b':'transparent'
+                  }}>
+                    <input
+                      type="radio"
+                      name={`q-${q.id}`}
+                      checked={choices[q.id]===idx}
+                      onChange={()=>setChoice(q.id, idx)}
+                    />
+                    <span>{opt}</span>
+                  </label>
+                ))}
+              </div>
             </div>
+          </Card>
+        ))}
 
-            <hr className="sep" />
-
-            {!result && (
-              <>
-                <div className="row" style={{justifyContent:'space-between', marginBottom:6}}>
-                  <div className="kpi"><span className="dot"></span><span>20 Zufallsfragen</span></div>
-                  <div className="subtle">{loading ? 'Lade Fragen…' : questions.length ? `${questions.length} geladen` : 'Keine Fragen gefunden'}</div>
-                </div>
-
-                {questions.length > 0 && (
-                  <form className="grid" onSubmit={(e)=>{e.preventDefault(); submitQuiz();}}>
-                    {questions.map((q, idx) => (
-                      <div key={q.id} className="q">
-                        <div className="qhead">
-                          <span className="qnum">{idx+1}</span>
-                          <span>{q.text}</span>
-                        </div>
-                        <input
-                          placeholder="Deine Antwort"
-                          value={answers[q.id] ?? ''}
-                          onChange={(e)=>setAnswers(a => ({...a, [q.id]: e.target.value}))}
-                        />
-                      </div>
-                    ))}
-                    <div className="row" style={{gap:10}}>
-                      <button className="btn btn-primary" disabled={!allAnswered || loading}>Abgeben & Auswerten</button>
-                      <button type="button" className="btn btn-secondary" onClick={restart} disabled={loading}>Neue Fragen</button>
-                    </div>
-                    {msg && <p className="subtle" style={{color:'#ffd200'}}>{msg}</p>}
-                  </form>
-                )}
-              </>
-            )}
-
-            {result && (
-              <div className="grid" style={{marginTop:8}}>
-                <div className="row" style={{gap:10}}>
-                  <div className="badge">
-                    <strong>Score:</strong>
-                    <span>{result.correct} / {result.total}</span>
-                  </div>
-                  <button className="btn btn-secondary" onClick={restart}>Noch einmal</button>
-                </div>
-
-                <div className="table">
-                  <table>
-                    <thead>
-                      <tr><th>#</th><th>Frage</th><th>Erwartet</th><th>OK</th></tr>
-                    </thead>
-                    <tbody>
-                      {questions.map((q, i) => {
-                        const wrong = result.wrongIds.has(q.id);
-                        return (
-                          <tr key={q.id}>
-                            <td style={{opacity:.7}}>{i+1}</td>
-                            <td>{q.text}</td>
-                            <td><code>{q.correct_answer}</code></td>
-                            <td className={wrong ? 'danger' : 'success'}>{wrong ? '✗' : '✓'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        <div style={{display:'flex', gap:12}}>
+          <button onClick={submit} disabled={questions.length===0 || status!=='idle'}>
+            Antworten abgeben
+          </button>
+          {result && (
+            <div style={{alignSelf:'center', color:'#facc15', fontWeight:700}}>
+              Ergebnis: {result.score} / {result.total}
+            </div>
+          )}
+        </div>
       </div>
     </div>
-  );
+  )
 }
