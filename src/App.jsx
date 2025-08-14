@@ -35,7 +35,7 @@ export default function App() {
 
   // Admin state
   const [adminList, setAdminList] = useState([])
-  const [adminLoading, setAdminLoading] = useState(false)
+  the [adminLoading, setAdminLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [editItem, setEditItem] = useState(null)
   const [newQ, setNewQ] = useState({ text: '', optionsText: '', correctIdx: 0, active: true })
@@ -254,6 +254,8 @@ export default function App() {
             {isAdmin && (
               <button onClick={()=>{ setTab('admin'); setView('quiz') }} style={{...styles.tabBtn, ...(tab==='admin'?styles.tabActive:{})}}>Admin</button>
             )}
+            {/* jederzeit neu laden */}
+            <button onClick={loadQuestions} style={styles.secondaryBtn}>Fragen neu laden</button>
             <button onClick={handleLogout} style={styles.linkBtn}>Abmelden</button>
           </div>
         </div>
@@ -265,16 +267,16 @@ export default function App() {
             answers={answers}
             setAnswers={setAnswers}
             evaluated={evaluated}
+            setEvaluated={setEvaluated}
             evaluateNow={evaluateNow}
             reload={loadQuestions}
-            startedAt={startedAt}
           />
         )}
 
         {tab==='quiz' && view==='results' && results && (
           <ResultsView
             results={results}
-            onNewRound={()=>loadQuestions()}
+            onNewRound={loadQuestions}
             onBack={()=>{ setView('quiz'); setEvaluated(false) }}
             toAdmin={()=> setTab('admin')}
           />
@@ -302,7 +304,7 @@ export default function App() {
   )
 }
 
-function QuizView({ loading, questions, answers, setAnswers, evaluated, evaluateNow, reload }) {
+function QuizView({ loading, questions, answers, setAnswers, evaluated, setEvaluated, evaluateNow, reload }) {
   const allAnswered = questions.length>0 && questions.every(q => Number.isInteger(answers[q.id]))
   return (
     <>
@@ -319,10 +321,17 @@ function QuizView({ loading, questions, answers, setAnswers, evaluated, evaluate
             <div style={styles.optionWrap}>
               {(q.options||[]).map((opt,i)=>{
                 const selected = answers[q.id]===i
+                const isCorrect = evaluated && i===q.correct_idx
+                const isWrong = evaluated && selected && i!==q.correct_idx
                 return (
                   <button key={i} type="button"
                     onClick={()=>{ if (!evaluated) setAnswers(prev=>({...prev, [q.id]: i})) }}
-                    style={{...styles.optionBtn, ...(selected?styles.optionSelected:{})}}>
+                    style={{
+                      ...styles.optionBtn,
+                      ...(selected ? styles.optionSelected : {}),
+                      ...(isCorrect ? styles.optionCorrect : {}),
+                      ...(isWrong ? styles.optionWrong : {}),
+                    }}>
                     {opt}
                   </button>
                 )
@@ -332,11 +341,21 @@ function QuizView({ loading, questions, answers, setAnswers, evaluated, evaluate
         ))}
       </div>
       <div style={{display:'flex', gap:12, marginTop:16}}>
-        <button style={{...styles.primaryBtn, opacity: allAnswered?1:.6}} disabled={!allAnswered}
-                onClick={evaluateNow}>
-          Auswerten
-        </button>
-        <button style={styles.secondaryBtn} onClick={reload}>Neue Runde</button>
+        {!evaluated ? (
+          <>
+            <button style={{...styles.primaryBtn, opacity: allAnswered?1:.6}} disabled={!allAnswered}
+                    onClick={evaluateNow}>
+              Auswerten
+            </button>
+            <button style={styles.secondaryBtn} onClick={reload}>Fragen neu laden</button>
+          </>
+        ) : (
+          <>
+            <button style={styles.secondaryBtn} onClick={()=>{ setEvaluated(false); reload() }}>
+              Neue Runde (neu ziehen)
+            </button>
+          </>
+        )}
       </div>
     </>
   )
@@ -504,10 +523,7 @@ function Header() {
   )
 }
 
-/**
- * Merkurnahe Sonne als inline-SVG (stilisiert, keine Marken-Grafik)
- * Gelb, leichte Strahlen, Glow – leichtgewichtig und ohne Asset-Datei.
- */
+/** Stilisierte Merkur-Sonne als inline SVG (leicht, ohne externes Asset) */
 function MerkurSun() {
   return (
     <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden focusable="false"
@@ -586,6 +602,8 @@ const styles = {
     borderRadius:10, padding:'10px 12px', cursor:'pointer'
   },
   optionSelected: { borderColor:'#facc15', boxShadow:'0 0 0 3px rgba(250,204,21,.18) inset' },
+  optionCorrect: { borderColor:'#22c55e', boxShadow:'0 0 0 3px rgba(34,197,94,.22) inset' }, // grün
+  optionWrong:   { borderColor:'#ef4444', boxShadow:'0 0 0 3px rgba(239,68,68,.22) inset' }, // rot
 
   resultsGrid: {
     display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',
