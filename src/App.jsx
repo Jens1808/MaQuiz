@@ -10,14 +10,7 @@ const HILITE = "#1F2937";
 
 const asEmail = (name) => (name.includes("@") ? name.trim() : `${name.trim().toUpperCase()}@quiz.local`);
 const range = (n) => Array.from({ length: n }, (_, i) => i);
-const shuffle = (arr) => {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-};
+const shuffle = (arr) => { const a = arr.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; };
 
 function Sun() {
   return MERKUR_LOGO_URL ? (
@@ -104,22 +97,11 @@ function AdminEditor({ editing, onCancel, onSaved }) {
     if (correct < 0 || correct >= clean.length) { setErr("Korrekter Index ist außerhalb des Bereichs"); return; }
     setSaving(true);
     try {
-      const payload = {
-        id: editing?.id,
-        text: text.trim(),
-        qtype: "mc",
-        options: clean,
-        correct_idx: correct,
-        active,
-      };
+      const payload = { id: editing?.id, text: text.trim(), qtype: "mc", options: clean, correct_idx: correct, active };
       const { error } = await supabase.from("questions").upsert(payload).select("id").single();
       if (error) throw error;
       onSaved?.();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { setErr(e.message); } finally { setSaving(false); }
   }
 
   return (
@@ -166,15 +148,21 @@ export default function App() {
   const [authMsg, setAuthMsg] = useState("");
 
   /** Tabs */
-  const [tab, setTab] = useState("quiz"); // 'quiz' | 'admin'
+  const [tab, setTab] = useState("quiz"); // 'quiz' | 'admin' | 'stat'
 
   /** Quiz */
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [showResult, setShowResult] = useState(false);
+  const [startedAt, setStartedAt] = useState(null);
   const allAnswered = questions.length > 0 && questions.every((q) => answers[q.id] != null);
   const score = useMemo(() => questions.filter((q) => answers[q.id] === q.correct_idx).length, [answers, questions]);
+
+  /** Statistik */
+  const [myAttempts, setMyAttempts] = useState([]);
+  const [teamAttempts, setTeamAttempts] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   /** Admin */
   const [adminList, setAdminList] = useState([]);
@@ -216,7 +204,7 @@ export default function App() {
   }
 
   async function fetchQuestions() {
-    setLoading(true); setAnswers({}); setShowResult(false);
+    setLoading(true); setAnswers({}); setShowResult(false); setStartedAt(Date.now());
     let rpcErr = null;
     try {
       const { data, error } = await supabase.rpc("get_random_questions_mc", { limit_count: 20 });
@@ -233,12 +221,74 @@ export default function App() {
       const pool = (data || []).filter((r) => Array.isArray(r.options) && typeof r.correct_idx === "number");
       const picked = shuffle(pool).slice(0, 20);
       setQuestions(picked.map((r) => ({ id: r.id, text: r.text, options: r.options, correct_idx: r.correct_idx })));
-    } catch (e2) {
-      setAuthMsg("Fehler beim Laden der Fragen:\n" + (rpcErr?.message || "") + "\n" + e2.message);
-    } finally { setLoading(false); }
+    } catch (e2) { setAuthMsg("Fehler beim Laden der Fragen:\n" + (rpcErr?.message || "") + "\n" + e2.message); }
+    finally { setLoading(false); }
   }
 
-  /** Admin: Liste laden */
+  /** Auswertung speichern */
+  async function saveAttempt() {
+    if (!user) return;
+    const payload = {
+      user_id: user.id,
+      email: user.email,
+      score: questions.filter((q) => answers[q.id] === q.correct_idx).length,
+      total: questions.length,
+      started_at: startedAt ? new Date(startedAt).toISOString() : null,
+      finished_at: new Date().toISOString(),
+      duration_seconds: startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : null,
+      details: {
+        question_ids: questions.map((q) => q.id),
+        answers,
+      },
+    };
+    const { error } = await supabase.from("attempts").insert(payload);
+    if (error) setAuthMsg("Speichern der Statistik fehlgeschlagen: " + error.message);
+  }
+
+  /** Statistik laden */
+  async function loadMyStats() {
+    if (!user) return;
+    setStatsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("attempts")
+        .select("id, score, total, finished_at, duration_seconds")
+        .eq("user_id", user.id)
+        .order("finished_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      setMyAttempts(data || []);
+    } catch (e) { setAuthMsg("Meine Statistik konnte nicht geladen werden: " + e.message); }
+    finally { setStatsLoading(false); }
+  }
+
+  async function loadTeamStats() {
+    if (role !== "admin") return;
+    setStatsLoading(true);
+    try {
+      // hole letzte 180 Tage
+      const since = new Date(Date.now() - 180*24*3600*1000).toISOString();
+      const { data, error } = await supabase
+        .from("attempts")
+        .select("user_id, email, score, total, finished_at")
+        .gte("finished_at", since)
+        .order("finished_at", { ascending: false })
+        .limit(5000);
+      if (error) throw error;
+      setTeamAttempts(data || []);
+    } catch (e) { setAuthMsg("Team-Statistik konnte nicht geladen werden: " + e.message); }
+    finally { setStatsLoading(false); }
+  }
+
+  // Tabs wechseln → ggf. Statistik nachladen
+  useEffect(() => {
+    if (tab === "stat") {
+      loadMyStats();
+      if (role === "admin") loadTeamStats();
+    }
+  }, [tab, role, user?.id]);
+
+  /** Admin: Fragen-Liste laden */
   async function loadAdminList() {
     setAdminLoading(true);
     try {
@@ -249,11 +299,8 @@ export default function App() {
         .limit(1000);
       if (error) throw error;
       setAdminList(data || []);
-    } catch (e) {
-      setAuthMsg("Admin-Laden fehlgeschlagen: " + e.message);
-    } finally {
-      setAdminLoading(false);
-    }
+    } catch (e) { setAuthMsg("Admin-Laden fehlgeschlagen: " + e.message); }
+    finally { setAdminLoading(false); }
   }
 
   async function removeQuestion(id) {
@@ -264,10 +311,7 @@ export default function App() {
   }
 
   const header = (
-    <div style={{
-      background: CARD, padding: 16, borderRadius: 16, border: `1px solid ${HILITE}`,
-      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10
-    }}>
+    <div style={{ background: CARD, padding: 16, borderRadius: 16, border: `1px solid ${HILITE}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <Sun />
         <div style={{ fontWeight: 800, fontSize: 20, color: "#E5E7EB" }}>MaQuiz</div>
@@ -290,11 +334,8 @@ export default function App() {
 
   if (!user) {
     return (
-      <div style={{
-        minHeight: "100vh",
-        background: `radial-gradient(1000px 600px at -10% -10%, rgba(255,211,0,.15), transparent 50%), ${DEEP}`,
-        display: "grid", placeItems: "center", color: "#E5E7EB", padding: 20
-      }}>
+      <div style={{ minHeight: "100vh", background: `radial-gradient(1000px 600px at -10% -10%, rgba(255,211,0,.15), transparent 50%), ${DEEP}`,
+        display: "grid", placeItems: "center", color: "#E5E7EB", padding: 20 }}>
         <div style={{ width: "min(680px, 94vw)", background: CARD, padding: 26, borderRadius: 18, boxShadow: "0 6px 26px rgba(0,0,0,.45)", border: `1px solid ${HILITE}` }}>
           {header}
           <h2 style={{ marginTop: 20, marginBottom: 12, color: "#F3F4F6" }}>Login</h2>
@@ -303,8 +344,7 @@ export default function App() {
               style={{ padding: "12px 14px", background: "#0B1220", color: "#E5E7EB", borderRadius: 12, border: `1px solid ${HILITE}` }} required />
             <input type="password" placeholder={first ? "Neues Passwort" : "Passwort"} value={pwd} onChange={(e) => setPwd(e.target.value)}
               style={{ padding: "12px 14px", background: "#0B1220", color: "#E5E7EB", borderRadius: 12, border: `1px solid ${HILITE}` }} required />
-            <button type="submit"
-              style={{ padding: "12px 14px", background: ACCENT, color: "#111827", fontWeight: 700, border: "none", borderRadius: 12, cursor: "pointer" }}>
+            <button type="submit" style={{ padding: "12px 14px", background: ACCENT, color: "#111827", fontWeight: 700, border: "none", borderRadius: 12, cursor: "pointer" }}>
               {first ? "Konto anlegen & einloggen" : "Einloggen"}
             </button>
           </form>
@@ -315,62 +355,42 @@ export default function App() {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: `radial-gradient(1200px 700px at 105% -10%, rgba(255,211,0,.12), transparent 55%), ${DEEP}`,
-      padding: 20, color: "#E5E7EB"
-    }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 700px at 105% -10%, rgba(255,211,0,.12), transparent 55%), ${DEEP}`,
+      padding: 20, color: "#E5E7EB" }}>
       <div style={{ width: "min(1100px, 94vw)", margin: "0 auto", display: "grid", gap: 18 }}>
         {header}
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setTab("quiz")}
-            style={{
-              padding: "10px 12px", borderRadius: 10,
-              background: tab === "quiz" ? ACCENT : "#0B1220",
-              color: tab === "quiz" ? "#111827" : "#E5E7EB",
-              border: tab === "quiz" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer"
-            }}>
-            Quiz
-          </button>
+          <button onClick={() => setTab("quiz")} style={{ padding: "10px 12px", borderRadius: 10, background: tab === "quiz" ? ACCENT : "#0B1220",
+            color: tab === "quiz" ? "#111827" : "#E5E7EB", border: tab === "quiz" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>Quiz</button>
+          <button onClick={() => setTab("stat")} style={{ padding: "10px 12px", borderRadius: 10, background: tab === "stat" ? ACCENT : "#0B1220",
+            color: tab === "stat" ? "#111827" : "#E5E7EB", border: tab === "stat" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>Statistik</button>
           {role === "admin" && (
-            <button onClick={() => { setTab("admin"); loadAdminList(); }}
-              style={{
-                padding: "10px 12px", borderRadius: 10,
-                background: tab === "admin" ? ACCENT : "#0B1220",
-                color: tab === "admin" ? "#111827" : "#E5E7EB",
-                border: tab === "admin" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer"
-              }}>
-              Admin
-            </button>
+            <button onClick={() => { setTab("admin"); loadAdminList(); }} style={{ padding: "10px 12px", borderRadius: 10, background: tab === "admin" ? ACCENT : "#0B1220",
+              color: tab === "admin" ? "#111827" : "#E5E7EB", border: tab === "admin" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>Admin</button>
           )}
           <div style={{ marginLeft: "auto", color: "#9CA3AF" }}>
             {tab === "quiz" && (loading ? "Lade Fragen…" : `${questions.length} Fragen geladen${showResult ? ` · Ergebnis: ${score}/${questions.length}` : ""}`)}
             {tab === "admin" && (adminLoading ? "Lade…" : `${adminList.length} Fragen`)}
+            {tab === "stat" && (statsLoading ? "Lade…" : `${myAttempts.length} Versuche`)}
           </div>
         </div>
 
         {/* Inhalt */}
         {tab === "quiz" ? (
           <>
-            {/* OBERER Bereich – nur „Neu laden“ bleibt oben (Auswerten wurde nach unten verlegt) */}
+            {/* OBERER Bereich – nur „Neu laden“ bleibt oben */}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={fetchQuestions} disabled={loading}
-                style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                🔄 Neu laden
-              </button>
+                style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>🔄 Neu laden</button>
 
               {showResult ? (
                 <>
-                  <button onClick={() => { setAnswers({}); setShowResult(false); }}
-                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                    Auswahl zurücksetzen
-                  </button>
+                  <button onClick={() => { setAnswers({}); setShowResult(false); setStartedAt(Date.now()); }}
+                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>Auswahl zurücksetzen</button>
                   <button onClick={fetchQuestions}
-                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
-                    ▶︎ Neue Runde
-                  </button>
+                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>▶︎ Neue Runde</button>
                 </>
               ) : null}
             </div>
@@ -387,16 +407,10 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* AUSWERTEN – jetzt UNTEN unter der Liste */}
+                {/* AUSWERTEN – jetzt UNTEN unter der Liste; speichert auch */}
                 <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                  <button onClick={() => setShowResult(true)} disabled={!allAnswered}
-                    style={{
-                      padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280",
-                      color: "#111827", borderRadius: 10, fontWeight: 800, border: "none",
-                      cursor: allAnswered ? "pointer" : "not-allowed"
-                    }}>
-                    Auswerten
-                  </button>
+                  <button onClick={async () => { setShowResult(true); await saveAttempt(); }} disabled={!allAnswered}
+                    style={{ padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280", color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: allAnswered ? "pointer" : "not-allowed" }}>Auswerten</button>
                 </div>
               </>
             ) : (
@@ -415,30 +429,122 @@ export default function App() {
                     <QuestionCard key={q.id} index={i} q={q} selected={answers[q.id]} onSelect={() => {}} showResult />
                   ))}
                 </div>
-
-                {/* Buttons am Ende der Auswertung (unverändert) */}
-                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                  <button onClick={() => { setAnswers({}); setShowResult(false); }}
-                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                    Auswahl zurücksetzen
-                  </button>
-                  <button onClick={fetchQuestions}
-                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
-                    ▶︎ Neue Runde
-                  </button>
-                </div>
               </div>
             )}
           </>
+        ) : tab === "stat" ? (
+          // ===== Statistik =====
+          <div style={{ display: "grid", gap: 14 }}>
+            {/* Eigene Kennzahlen */}
+            <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+              <div style={{ fontWeight: 700, marginBottom: 10 }}>Meine Statistik</div>
+              {myAttempts.length === 0 ? (
+                <div style={{ color: "#9CA3AF" }}>Noch keine Versuche gespeichert. Spiele ein Quiz und werte es aus.</div>
+              ) : (
+                <>
+                  {(() => {
+                    const total = myAttempts.length;
+                    const sumPct = myAttempts.reduce((acc, a) => acc + (a.total ? a.score / a.total : 0), 0);
+                    const best = myAttempts.reduce((m, a) => Math.max(m, a.total ? Math.round(100 * a.score / a.total) : 0), 0);
+                    const avg = Math.round((sumPct / total) * 100);
+                    const last = myAttempts[0]?.finished_at;
+                    return (
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        <Badge label={`Versuche: ${total}`} />
+                        <Badge label={`Ø Quote: ${avg}%`} />
+                        <Badge label={`Bestleistung: ${best}%`} />
+                        <Badge label={`Letzter: ${new Date(last).toLocaleString()}`} />
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{ marginTop: 12, overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ textAlign: "left", color: "#CBD5E1" }}>
+                          <th style={{ padding: 8 }}>Datum</th>
+                          <th style={{ padding: 8 }}>Score</th>
+                          <th style={{ padding: 8 }}>Quote</th>
+                          <th style={{ padding: 8 }}>Dauer</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myAttempts.map((a) => (
+                          <tr key={a.id} style={{ borderTop: `1px solid ${HILITE}` }}>
+                            <td style={{ padding: 8 }}>{new Date(a.finished_at).toLocaleString()}</td>
+                            <td style={{ padding: 8 }}>{a.score} / {a.total}</td>
+                            <td style={{ padding: 8 }}>{a.total ? Math.round(100 * a.score / a.total) : 0}%</td>
+                            <td style={{ padding: 8 }}>{a.duration_seconds ? `${a.duration_seconds}s` : "–"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Team (nur Admin) */}
+            {role === "admin" && (
+              <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>Team-Statistik (letzte 180 Tage)</div>
+                {teamAttempts.length === 0 ? (
+                  <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>
+                ) : (
+                  <>
+                    {(() => {
+                      // Aggregation pro Email
+                      const byEmail = new Map();
+                      for (const a of teamAttempts) {
+                        const key = (a.email || "").toUpperCase();
+                        if (!byEmail.has(key)) byEmail.set(key, []);
+                        byEmail.get(key).push(a);
+                      }
+                      const rows = Array.from(byEmail.entries()).map(([email, arr]) => {
+                        const total = arr.length;
+                        const sumPct = arr.reduce((acc, a) => acc + (a.total ? a.score / a.total : 0), 0);
+                        const avg = Math.round((sumPct / total) * 100);
+                        const best = arr.reduce((m, a) => Math.max(m, a.total ? Math.round(100 * a.score / a.total) : 0), 0);
+                        const last = arr.sort((x,y) => new Date(y.finished_at) - new Date(x.finished_at))[0]?.finished_at;
+                        return { email, total, avg, best, last };
+                      }).sort((a,b) => a.email.localeCompare(b.email));
+
+                      return (
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <thead>
+                              <tr style={{ textAlign: "left", color: "#CBD5E1" }}>
+                                <th style={{ padding: 8 }}>Mitarbeiter</th>
+                                <th style={{ padding: 8 }}>Versuche</th>
+                                <th style={{ padding: 8 }}>Ø Quote</th>
+                                <th style={{ padding: 8 }}>Bestleistung</th>
+                                <th style={{ padding: 8 }}>Letzter Versuch</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((r) => (
+                                <tr key={r.email} style={{ borderTop: `1px solid ${HILITE}` }}>
+                                  <td style={{ padding: 8 }}>{r.email.split("@")[0]}</td>
+                                  <td style={{ padding: 8 }}>{r.total}</td>
+                                  <td style={{ padding: 8 }}>{r.avg}%</td>
+                                  <td style={{ padding: 8 }}>{r.best}%</td>
+                                  <td style={{ padding: 8 }}>{new Date(r.last).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           // ===== Admin =====
           <div style={{ display: "grid", gap: 14 }}>
-            <AdminEditor
-              editing={editing}
-              onCancel={() => setEditing(null)}
-              onSaved={async () => { setEditing(null); await loadAdminList(); }}
-            />
-
+            <AdminEditor editing={editing} onCancel={() => setEditing(null)} onSaved={async () => { setEditing(null); await loadAdminList(); }} />
             <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 12 }}>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Fragen (neueste zuerst)</div>
               <div style={{ display: "grid", gap: 8 }}>
@@ -448,22 +554,13 @@ export default function App() {
                       <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <span style={{ color: "#9CA3AF" }}>{q.active ? "aktiv" : "inaktiv"}</span>
-                        <button onClick={() => setEditing(q)}
-                          style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}>
-                          Bearbeiten
-                        </button>
-                        <button onClick={() => removeQuestion(q.id)}
-                          style={{ padding: "6px 10px", background: "#DC2626", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
-                          Löschen
-                        </button>
+                        <button onClick={() => setEditing(q)} style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}>Bearbeiten</button>
+                        <button onClick={() => removeQuestion(q.id)} style={{ padding: "6px 10px", background: "#DC2626", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>Löschen</button>
                       </div>
                     </div>
                     <div style={{ marginTop: 6, color: "#CBD5E1", fontSize: 14 }}>
                       {q.options?.map((o, i) => (
-                        <span key={i} style={{
-                          padding: "2px 8px", borderRadius: 999, marginRight: 6,
-                          border: `1px solid ${i === q.correct_idx ? "#16A34A" : HILITE}`, color: i === q.correct_idx ? "#16A34A" : "#CBD5E1"
-                        }}>
+                        <span key={i} style={{ padding: "2px 8px", borderRadius: 999, marginRight: 6, border: `1px solid ${i === q.correct_idx ? "#16A34A" : HILITE}`, color: i === q.correct_idx ? "#16A34A" : "#CBD5E1" }}>
                           {o}{i === q.correct_idx ? " ✔" : ""}
                         </span>
                       ))}
@@ -479,5 +576,13 @@ export default function App() {
         {authMsg && <p style={{ color: "#F87171", whiteSpace: "pre-wrap" }}>{authMsg}</p>}
       </div>
     </div>
+  );
+}
+
+function Badge({ label }) {
+  return (
+    <span style={{ background: "#0B1220", border: `1px solid ${HILITE}", padding: "8px 10px", borderRadius: 10, color: "#E5E7EB" }}>
+      {label}
+    </span>
   );
 }
