@@ -354,43 +354,51 @@ export default function App() {
         {/* Inhalt */}
         {tab === "quiz" ? (
           <>
+            {/* OBERER Bereich – nur „Neu laden“ bleibt oben (Auswerten wurde nach unten verlegt) */}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={fetchQuestions} disabled={loading}
                 style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
                 🔄 Neu laden
               </button>
-              {!showResult ? (
-                <button onClick={() => setShowResult(true)} disabled={!allAnswered}
-                  style={{
-                    padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280",
-                    color: "#111827", borderRadius: 10, fontWeight: 800, border: "none",
-                    cursor: allAnswered ? "pointer" : "not-allowed"
-                  }}>
-                  Auswerten
-                </button>
-              ) : (
-                <button onClick={() => { setAnswers({}); setShowResult(false); }}
-                  style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                  Auswahl zurücksetzen
-                </button>
-              )}
-              {showResult && (
-                <button onClick={fetchQuestions}
-                  style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
-                  ▶︎ Neue Runde
-                </button>
-              )}
+
+              {showResult ? (
+                <>
+                  <button onClick={() => { setAnswers({}); setShowResult(false); }}
+                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+                    Auswahl zurücksetzen
+                  </button>
+                  <button onClick={fetchQuestions}
+                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
+                    ▶︎ Neue Runde
+                  </button>
+                </>
+              ) : null}
             </div>
 
+            {/* FRAGENLISTE */}
             {!showResult ? (
-              <div style={{ display: "grid", gap: 14 }}>
-                {questions.map((q, i) => (
-                  <QuestionCard key={q.id} index={i} q={q}
-                    selected={answers[q.id]}
-                    onSelect={(idx) => setAnswers((p) => ({ ...p, [q.id]: idx }))}
-                    showResult={false} />
-                ))}
-              </div>
+              <>
+                <div style={{ display: "grid", gap: 14 }}>
+                  {questions.map((q, i) => (
+                    <QuestionCard key={q.id} index={i} q={q}
+                      selected={answers[q.id]}
+                      onSelect={(idx) => setAnswers((p) => ({ ...p, [q.id]: idx }))}
+                      showResult={false} />
+                  ))}
+                </div>
+
+                {/* AUSWERTEN – jetzt UNTEN unter der Liste */}
+                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                  <button onClick={() => setShowResult(true)} disabled={!allAnswered}
+                    style={{
+                      padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280",
+                      color: "#111827", borderRadius: 10, fontWeight: 800, border: "none",
+                      cursor: allAnswered ? "pointer" : "not-allowed"
+                    }}>
+                    Auswerten
+                  </button>
+                </div>
+              </>
             ) : (
               <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 16, padding: 18 }}>
                 <h2 style={{ margin: "4px 0 12px 0", color: "#F3F4F6" }}>Auswertung</h2>
@@ -406,6 +414,18 @@ export default function App() {
                   {questions.map((q, i) => (
                     <QuestionCard key={q.id} index={i} q={q} selected={answers[q.id]} onSelect={() => {}} showResult />
                   ))}
+                </div>
+
+                {/* Buttons am Ende der Auswertung (unverändert) */}
+                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                  <button onClick={() => { setAnswers({}); setShowResult(false); }}
+                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+                    Auswahl zurücksetzen
+                  </button>
+                  <button onClick={fetchQuestions}
+                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
+                    ▶︎ Neue Runde
+                  </button>
                 </div>
               </div>
             )}
