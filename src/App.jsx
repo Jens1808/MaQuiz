@@ -43,37 +43,64 @@ function Sun() {
 function QuestionCard({ index, q, selected, onSelect, showResult }) {
   const isCorrect = showResult && selected === q.correct_idx;
   const isWrong = showResult && selected != null && selected !== q.correct_idx;
+
   return (
-    <div style={{
-      background: CARD, borderRadius: 14, padding: 18,
-      border: `2px solid ${isCorrect ? "#16A34A" : isWrong ? "#DC2626" : "transparent"}`,
-      boxShadow: "0 2px 10px rgba(0,0,0,.35)"
-    }}>
+    <div
+      style={{
+        background: CARD,
+        borderRadius: 14,
+        padding: 18,
+        border: `2px solid ${isCorrect ? "#16A34A" : isWrong ? "#DC2626" : "transparent"}`,
+        boxShadow: "0 2px 10px rgba(0,0,0,.35)",
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#D1D5DB" }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: "50%", background: HILITE,
-          border: `2px solid ${ACCENT}`, display: "grid", placeItems: "center", fontSize: 12
-        }}>{index + 1}</div>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            background: HILITE,
+            border: `2px solid ${ACCENT}`,
+            display: "grid",
+            placeItems: "center",
+            fontSize: 12,
+          }}
+        >
+          {index + 1}
+        </div>
         <div style={{ fontWeight: 600, color: "#E5E7EB" }}>{q.text}</div>
       </div>
+
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
         {q.options.map((opt, i) => {
           const chosen = selected === i;
           const correct = showResult && i === q.correct_idx;
           const wrong = showResult && chosen && i !== q.correct_idx;
           return (
-            <button key={i} type="button" onClick={() => onSelect(i)} disabled={showResult}
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(i)}
+              disabled={showResult}
               style={{
-                textAlign: "left", borderRadius: 12, padding: "12px 14px",
-                background: chosen ? "#1F2937" : "#0B1220", color: "#E5E7EB",
-                border: `2px solid ${correct ? "#16A34A" : wrong ? "#DC2626" : chosen ? ACCENT : "#1F2937"}`,
-                cursor: showResult ? "default" : "pointer"
-              }}>
+                textAlign: "left",
+                borderRadius: 12,
+                padding: "12px 14px",
+                background: chosen ? "#1F2937" : "#0B1220",
+                color: "#E5E7EB",
+                border: `2px solid ${
+                  correct ? "#16A34A" : wrong ? "#DC2626" : chosen ? ACCENT : "#1F2937"
+                }`,
+                cursor: showResult ? "default" : "pointer",
+              }}
+            >
               {opt}
             </button>
           );
         })}
       </div>
+
       {showResult && (
         <div style={{ marginTop: 10, color: isCorrect ? "#16A34A" : "#F87171" }}>
           {isCorrect ? "Richtig ✔" : `Falsch ✖ – korrekt: ${q.options[q.correct_idx]}`}
@@ -98,10 +125,19 @@ function AdminEditor({ editing, onCancel, onSaved }) {
 
   async function save() {
     setErr("");
-    if (!text.trim()) { setErr("Fragetext fehlt"); return; }
+    if (!text.trim()) {
+      setErr("Fragetext fehlt");
+      return;
+    }
     const clean = opts.map((o) => o.trim()).filter(Boolean);
-    if (clean.length < 2) { setErr("Mindestens 2 Optionen erforderlich"); return; }
-    if (correct < 0 || correct >= clean.length) { setErr("Korrekter Index ist außerhalb des Bereichs"); return; }
+    if (clean.length < 2) {
+      setErr("Mindestens 2 Optionen erforderlich");
+      return;
+    }
+    if (correct < 0 || correct >= clean.length) {
+      setErr("Korrekter Index ist außerhalb des Bereichs");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -125,14 +161,26 @@ function AdminEditor({ editing, onCancel, onSaved }) {
   return (
     <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14, display: "grid", gap: 10 }}>
       <div style={{ fontWeight: 700, color: "#E5E7EB" }}>{isEdit ? "Frage bearbeiten" : "Neue Frage anlegen"}</div>
-      <input placeholder="Fragetext"
-        value={text} onChange={(e) => setText(e.target.value)}
-        style={{ padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
+      <input
+        placeholder="Fragetext"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        style={{ padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }}
+      />
       {range(4).map((i) => (
         <div key={i} style={{ display: "flex", gap: 10 }}>
-          <input placeholder={`Option ${i + 1}`} value={opts[i] || ""}
-            onChange={(e) => setOpts((p) => { const c = p.slice(); c[i] = e.target.value; return c; })}
-            style={{ flex: 1, padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
+          <input
+            placeholder={`Option ${i + 1}`}
+            value={opts[i] || ""}
+            onChange={(e) =>
+              setOpts((p) => {
+                const c = p.slice();
+                c[i] = e.target.value;
+                return c;
+              })
+            }
+            style={{ flex: 1, padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }}
+          />
           <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#E5E7EB" }}>
             <input type="radio" name="correct" checked={correct === i} onChange={() => setCorrect(i)} /> korrekt
           </label>
@@ -143,12 +191,17 @@ function AdminEditor({ editing, onCancel, onSaved }) {
       </label>
       {err && <div style={{ color: "#F87171" }}>{err}</div>}
       <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={save} disabled={saving}
-          style={{ padding: "10px 12px", background: ACCENT, color: "#111827", fontWeight: 800, border: "none", borderRadius: 10, cursor: "pointer" }}>
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{ padding: "10px 12px", background: ACCENT, color: "#111827", fontWeight: 800, border: "none", borderRadius: 10, cursor: "pointer" }}
+        >
           {isEdit ? "Speichern" : "Anlegen"}
         </button>
-        <button onClick={onCancel}
-          style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+        <button
+          onClick={onCancel}
+          style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
+        >
           Abbrechen
         </button>
       </div>
@@ -156,122 +209,7 @@ function AdminEditor({ editing, onCancel, onSaved }) {
   );
 }
 
-/** ===== Mini Router (hash-basiert) ===== */
-const useRoute = () => {
-  const [route, setRoute] = useState(() => window.location.hash.replace("#", "") || "/quiz");
-  useEffect(() => {
-    const onHash = () => setRoute(window.location.hash.replace("#", "") || "/quiz");
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-  const nav = (to) => { if (!to.startsWith("#")) window.location.hash = to; else window.location.hash = to; };
-  return [route, nav];
-};
-
-/** ===== Statistik-Ansicht (eigene Seite) ===== */
-function StatsPage({ role }) {
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [myAttempts, setMyAttempts] = useState([]);
-  const [mySummary, setMySummary] = useState({ count: 0, avg: 0, best: 0 });
-  const [teamAgg, setTeamAgg] = useState([]);
-
-  useEffect(() => { loadMy(); if (role === "admin") loadTeam(); }, [role]);
-
-  async function loadMy() {
-    setStatsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("attempts")
-        .select("id, score, total, created_at")
-        .eq("user_id", (await supabase.auth.getUser()).data.user.id)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      setMyAttempts(data || []);
-      const count = data?.length || 0;
-      const avg = count ? Math.round((data.reduce((s, a) => s + a.score / a.total, 0) / count) * 100) : 0;
-      const best = count ? Math.max(...data.map((a) => Math.round((a.score / a.total) * 100))) : 0;
-      setMySummary({ count, avg, best });
-    } finally { setStatsLoading(false); }
-  }
-
-  async function loadTeam() {
-    setStatsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("attempts")
-        .select("user_id, email, score, total, created_at")
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      const byEmail = new Map();
-      (data || []).forEach((a) => {
-        const key = a.email || a.user_id; const arr = byEmail.get(key) || []; arr.push(a); byEmail.set(key, arr);
-      });
-      const rows = Array.from(byEmail.entries()).map(([email, arr]) => {
-        const count = arr.length;
-        const avg = Math.round((arr.reduce((s, x) => s + x.score / x.total, 0) / count) * 100);
-        const best = Math.max(...arr.map((x) => Math.round((x.score / x.total) * 100)));
-        const lastAt = arr[0]?.created_at;
-        return { email, count, avg, best, lastAt };
-      }).sort((a,b)=> b.avg-a.avg || b.best-a.best);
-      setTeamAgg(rows);
-    } finally { setStatsLoading(false); }
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>Meine Statistik</div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <Badge label="Versuche" value={mySummary.count} />
-          <Badge label="Durchschnitt" value={`${mySummary.avg}%`} />
-          <Badge label="Bestleistung" value={`${mySummary.best}%`} />
-        </div>
-        <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-          {(myAttempts || []).map((a) => (
-            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
-              <span style={{ color: "#E5E7EB" }}>{new Date(a.created_at).toLocaleString()}</span>
-              <span style={{ color: "#CBD5E1" }}>{a.score} / {a.total} ({Math.round((a.score / a.total) * 100)}%)</span>
-            </div>
-          ))}
-          {myAttempts.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Versuche.</div>}
-        </div>
-      </div>
-
-      {role === 'admin' && (
-        <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>Team-Statistik</div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {(teamAgg || []).map((r) => (
-              <div key={r.email} style={{ display: "grid", gridTemplateColumns: "1.2fr .5fr .6fr .9fr", gap: 8, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
-                <div style={{ color: "#E5E7EB" }}>{r.email}</div>
-                <div style={{ color: "#CBD5E1" }}>{r.count}×</div>
-                <div style={{ color: "#CBD5E1" }}>{r.avg}% ⌀ / Best {r.best}%</div>
-                <div style={{ color: "#9CA3AF", textAlign: "right" }}>{r.lastAt ? new Date(r.lastAt).toLocaleString() : "–"}</div>
-              </div>
-            ))}
-            {teamAgg.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Badge({ label, value }) {
-  return (
-    <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 10, padding: "8px 10px", color: "#E5E7EB" }}>
-      <div style={{ fontSize: 12, color: "#9CA3AF" }}>{label}</div>
-      <div style={{ fontWeight: 800 }}>{value}</div>
-    </div>
-  );
-}
-
 export default function App() {
-  /** ===== Mini-Router ===== */
-  const [route, nav] = useRoute(); // '/quiz' | '/stats' | '/admin'
-
   /** Auth */
   const [name, setName] = useState("");
   const [pwd, setPwd] = useState("");
@@ -280,13 +218,24 @@ export default function App() {
   const [role, setRole] = useState("");
   const [authMsg, setAuthMsg] = useState("");
 
+  /** Tabs */
+  const [tab, setTab] = useState("quiz"); // 'quiz' | 'stats' | 'admin'
+
   /** Quiz */
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [showResult, setShowResult] = useState(false);
+  const [savedAttempt, setSavedAttempt] = useState(false);
+  const [startedAt, setStartedAt] = useState(null);
   const allAnswered = questions.length > 0 && questions.every((q) => answers[q.id] != null);
   const score = useMemo(() => questions.filter((q) => answers[q.id] === q.correct_idx).length, [answers, questions]);
+
+  /** Stats */
+  const [myAttempts, setMyAttempts] = useState([]);
+  const [mySummary, setMySummary] = useState({ count: 0, avg: 0, best: 0 });
+  const [teamAgg, setTeamAgg] = useState([]); // [{email, count, avg, best, lastAt}]
+  const [statsLoading, setStatsLoading] = useState(false);
 
   /** Admin */
   const [adminList, setAdminList] = useState([]);
@@ -302,6 +251,13 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (tab === "stats" && user) {
+      loadMyStats();
+      if (role === "admin") loadTeamStats();
+    }
+  }, [tab, user, role]);
+
   async function handleSubmit(e) {
     e.preventDefault();
     setAuthMsg("");
@@ -309,7 +265,10 @@ export default function App() {
 
     if (first) {
       const { error } = await supabase.auth.signUp({ email, password: pwd, options: { data: { role: "user" } } });
-      if (error) { setAuthMsg(error.message); return; }
+      if (error) {
+        setAuthMsg(error.message);
+        return;
+      }
     }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd });
     if (error) {
@@ -324,31 +283,134 @@ export default function App() {
 
   async function logout() {
     await supabase.auth.signOut();
-    setUser(null); setRole(""); setQuestions([]); setAnswers({}); setShowResult(false); setName(""); setPwd("");
-    nav("#/quiz");
+    setUser(null);
+    setRole("");
+    setQuestions([]);
+    setAnswers({});
+    setShowResult(false);
+    setSavedAttempt(false);
+    setTab("quiz");
+    setName("");
+    setPwd("");
   }
 
   async function fetchQuestions() {
-    setLoading(true); setAnswers({}); setShowResult(false);
+    setLoading(true);
+    setAnswers({});
+    setShowResult(false);
+    setSavedAttempt(false);
+    setStartedAt(new Date());
+
     let rpcErr = null;
     try {
       const { data, error } = await supabase.rpc("get_random_questions_mc", { limit_count: 20 });
       if (error) rpcErr = error;
       if (Array.isArray(data) && data.length) {
         setQuestions(data.map((r) => ({ id: r.id, text: r.text, options: r.options || [], correct_idx: r.correct_idx ?? null })));
-        setLoading(false); return;
+        setLoading(false);
+        return;
       }
-    } catch (e) { rpcErr = e; }
+    } catch (e) {
+      rpcErr = e;
+    }
     try {
-      const { data, error } = await supabase.from("questions")
-        .select("id, text, options, correct_idx, active, qtype").eq("qtype", "mc").eq("active", true);
+      const { data, error } = await supabase
+        .from("questions")
+        .select("id, text, options, correct_idx, active, qtype")
+        .eq("qtype", "mc")
+        .eq("active", true);
       if (error) throw error;
       const pool = (data || []).filter((r) => Array.isArray(r.options) && typeof r.correct_idx === "number");
       const picked = shuffle(pool).slice(0, 20);
       setQuestions(picked.map((r) => ({ id: r.id, text: r.text, options: r.options, correct_idx: r.correct_idx })));
     } catch (e2) {
       setAuthMsg("Fehler beim Laden der Fragen:\n" + (rpcErr?.message || "") + "\n" + e2.message);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveAttempt() {
+    if (!user || savedAttempt) return;
+    try {
+      const finishedAt = new Date();
+      const duration = startedAt ? Math.max(0, Math.round((finishedAt - startedAt) / 1000)) : null;
+
+      const payload = {
+        user_id: user.id,
+        email: user.email,
+        score: score,
+        total: questions.length,
+        started_at: startedAt?.toISOString?.() || null,
+        finished_at: finishedAt.toISOString(),
+        duration_seconds: duration,
+        details: questions.map((q) => ({
+          id: q.id,
+          chosen: answers[q.id],
+          correct: q.correct_idx,
+          ok: answers[q.id] === q.correct_idx,
+        })),
+      };
+      const { error } = await supabase.from("attempts").insert(payload).select("id").single();
+      if (error) throw error;
+      setSavedAttempt(true);
+    } catch (e) {
+      console.warn("saveAttempt failed:", e.message);
+    }
+  }
+
+  async function loadMyStats() {
+    setStatsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("attempts")
+        .select("id, score, total, finished_at")
+        .eq("user_id", user.id)
+        .order("finished_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setMyAttempts(data || []);
+      const count = data?.length || 0;
+      const avg = count ? Math.round((data.reduce((s, a) => s + a.score / a.total, 0) / count) * 100) : 0;
+      const best = count ? Math.max(...data.map((a) => Math.round((a.score / a.total) * 100))) : 0;
+      setMySummary({ count, avg, best });
+    } catch (e) {
+      setAuthMsg("Konnte Nutzer-Statistik nicht laden: " + e.message);
+    } finally {
+      setStatsLoading(false);
+    }
+  }
+
+  async function loadTeamStats() {
+    setStatsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("attempts")
+        .select("user_id, email, score, total, finished_at")
+        .order("finished_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      const byEmail = new Map();
+      (data || []).forEach((a) => {
+        const key = a.email || a.user_id;
+        const arr = byEmail.get(key) || [];
+        arr.push(a);
+        byEmail.set(key, arr);
+      });
+      const rows = Array.from(byEmail.entries()).map(([email, arr]) => {
+        const count = arr.length;
+        const avg = Math.round((arr.reduce((s, x) => s + x.score / x.total, 0) / count) * 100);
+        const best = Math.max(...arr.map((x) => Math.round((x.score / x.total) * 100)));
+        const lastAt = arr[0]?.finished_at;
+        return { email, count, avg, best, lastAt };
+      });
+      rows.sort((a, b) => b.avg - a.avg || b.best - a.best);
+      setTeamAgg(rows);
+    } catch (e) {
+      setAuthMsg("Konnte Team-Statistik nicht laden: " + e.message);
+    } finally {
+      setStatsLoading(false);
+    }
   }
 
   async function loadAdminList() {
@@ -371,15 +433,26 @@ export default function App() {
   async function removeQuestion(id) {
     if (!window.confirm("Diese Frage wirklich löschen?")) return;
     const { error } = await supabase.from("questions").delete().eq("id", id);
-    if (error) { alert(error.message); return; }
+    if (error) {
+      alert(error.message);
+      return;
+    }
     await loadAdminList();
   }
 
   const header = (
-    <div style={{
-      background: CARD, padding: 16, borderRadius: 16, border: `1px solid ${HILITE}`,
-      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10
-    }}>
+    <div
+      style={{
+        background: CARD,
+        padding: 16,
+        borderRadius: 16,
+        border: `1px solid ${HILITE}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <Sun />
         <div style={{ fontWeight: 800, fontSize: 20, color: "#E5E7EB" }}>MaQuiz</div>
@@ -387,12 +460,15 @@ export default function App() {
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {user && (
           <span style={{ color: "#9CA3AF", fontSize: 14 }}>
-            Angemeldet als <b style={{ color: "#E5E7EB" }}>{user.email}</b>{role === "admin" ? " · Admin" : ""}
+            Angemeldet als <b style={{ color: "#E5E7EB" }}>{user.email}</b>
+            {role === "admin" ? " · Admin" : ""}
           </span>
         )}
         {user ? (
-          <button onClick={logout}
-            style={{ padding: "8px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+          <button
+            onClick={logout}
+            style={{ padding: "8px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
+          >
             Abmelden
           </button>
         ) : null}
@@ -402,21 +478,39 @@ export default function App() {
 
   if (!user) {
     return (
-      <div style={{
-        minHeight: "100vh",
-        background: `radial-gradient(1000px 600px at -10% -10%, rgba(255,211,0,.15), transparent 50%), ${DEEP}`,
-        display: "grid", placeItems: "center", color: "#E5E7EB", padding: 20
-      }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          background: `radial-gradient(1000px 600px at -10% -10%, rgba(255,211,0,.15), transparent 50%), ${DEEP}`,
+          display: "grid",
+          placeItems: "center",
+          color: "#E5E7EB",
+          padding: 20,
+        }}
+      >
         <div style={{ width: "min(680px, 94vw)", background: CARD, padding: 26, borderRadius: 18, boxShadow: "0 6px 26px rgba(0,0,0,.45)", border: `1px solid ${HILITE}` }}>
           {header}
           <h2 style={{ marginTop: 20, marginBottom: 12, color: "#F3F4F6" }}>Login</h2>
           <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-            <input placeholder="Benutzername (z. B. ADMIN) oder E-Mail" value={name} onChange={(e) => setName(e.target.value)}
-              style={{ padding: "12px 14px", background: "#0B1220", color: "#E5E7EB", borderRadius: 12, border: `1px solid ${HILITE}` }} required />
-            <input type="password" placeholder={first ? "Neues Passwort" : "Passwort"} value={pwd} onChange={(e) => setPwd(e.target.value)}
-              style={{ padding: "12px 14px", background: "#0B1220", color: "#E5E7EB", borderRadius: 12, border: `1px solid ${HILITE}` }} required />
-            <button type="submit"
-              style={{ padding: "12px 14px", background: ACCENT, color: "#111827", fontWeight: 700, border: "none", borderRadius: 12, cursor: "pointer" }}>
+            <input
+              placeholder="Benutzername (z. B. ADMIN) oder E-Mail"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ padding: "12px 14px", background: "#0B1220", color: "#E5E7EB", borderRadius: 12, border: `1px solid ${HILITE}` }}
+              required
+            />
+            <input
+              type="password"
+              placeholder={first ? "Neues Passwort" : "Passwort"}
+              value={pwd}
+              onChange={(e) => setPwd(e.target.value)}
+              style={{ padding: "12px 14px", background: "#0B1220", color: "#E5E7EB", borderRadius: 12, border: `1px solid ${HILITE}` }}
+              required
+            />
+            <button
+              type="submit"
+              style={{ padding: "12px 14px", background: ACCENT, color: "#111827", fontWeight: 700, border: "none", borderRadius: 12, cursor: "pointer" }}
+            >
               {first ? "Konto anlegen & einloggen" : "Einloggen"}
             </button>
           </form>
@@ -426,69 +520,249 @@ export default function App() {
     );
   }
 
-  // ===== Layout mit Router-Navigation =====
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: `radial-gradient(1200px 700px at 105% -10%, rgba(255,211,0,.12), transparent 55%), ${DEEP}`,
-      padding: 20, color: "#E5E7EB"
-    }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: `radial-gradient(1200px 700px at 105% -10%, rgba(255,211,0,.12), transparent 55%), ${DEEP}`,
+        padding: 20,
+        color: "#E5E7EB",
+      }}
+    >
       <div style={{ width: "min(1100px, 94vw)", margin: "0 auto", display: "grid", gap: 18 }}>
         {header}
 
-        {/* Nav */}
+        {/* Tabs */}
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => (window.location.hash = "/quiz")}
-            style={{ padding: "10px 12px", borderRadius: 10, background: route === "/quiz" ? ACCENT : "#0B1220", color: route === "/quiz" ? "#111827" : "#E5E7EB", border: route === "/quiz" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>Quiz</button>
-          <button onClick={() => (window.location.hash = "/stats")}
-            style={{ padding: "10px 12px", borderRadius: 10, background: route === "/stats" ? ACCENT : "#0B1220", color: route === "/stats" ? "#111827" : "#E5E7EB", border: route === "/stats" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>Statistik</button>
+          <button
+            onClick={() => setTab("quiz")}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: tab === "quiz" ? ACCENT : "#0B1220",
+              color: tab === "quiz" ? "#111827" : "#E5E7EB",
+              border: tab === "quiz" ? "none" : `1px solid ${HILITE}`,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            Quiz
+          </button>
+          <button
+            onClick={() => setTab("stats")}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: tab === "stats" ? ACCENT : "#0B1220",
+              color: tab === "stats" ? "#111827" : "#E5E7EB",
+              border: tab === "stats" ? "none" : `1px solid ${HILITE}`,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            Statistik
+          </button>
           {role === "admin" && (
-            <button onClick={() => { window.location.hash = "/admin"; loadAdminList(); }}
-              style={{ padding: "10px 12px", borderRadius: 10, background: route === "/admin" ? ACCENT : "#0B1220", color: route === "/admin" ? "#111827" : "#E5E7EB", border: route === "/admin" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>Admin</button>
+            <button
+              onClick={() => {
+                setTab("admin");
+                loadAdminList();
+                loadTeamStats();
+              }}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: tab === "admin" ? ACCENT : "#0B1220",
+                color: tab === "admin" ? "#111827" : "#E5E7EB",
+                border: tab === "admin" ? "none" : `1px solid ${HILITE}`,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Admin
+            </button>
           )}
           <div style={{ marginLeft: "auto", color: "#9CA3AF" }}>
-            {route === "/quiz" && (loading ? "Lade Fragen…" : `${questions.length} Fragen geladen`)}
+            {tab === "quiz" && (loading ? "Lade Fragen…" : `${questions.length} Fragen geladen${showResult ? ` · Ergebnis: ${score}/${questions.length}` : ""}`)}
+            {tab === "stats" && (statsLoading ? "Lade Statistik…" : "")}
+            {tab === "admin" && (adminLoading ? "Lade…" : `${adminList.length} Fragen`)}
           </div>
         </div>
 
-        {/* Routen */}
-        {route === "/quiz" && (
+        {/* Inhalt */}
+        {tab === "quiz" ? (
           <>
+            {/* oben: nur Neu laden + (bei Ergebnis) Reset/Neue Runde */}
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={fetchQuestions} disabled={loading}
-                style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>🔄 Neu laden</button>
-            </div>
-            <div style={{ display: "grid", gap: 14 }}>
-              {questions.map((q, i) => (
-                <QuestionCard key={q.id} index={i} q={q}
-                  selected={answers[q.id]}
-                  onSelect={(idx) => setAnswers((p) => ({ ...p, [q.id]: idx }))}
-                  showResult={false} />
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-              <button onClick={() => setShowResult(true)} disabled={!allAnswered}
-                style={{ padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280", color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: allAnswered ? "pointer" : "not-allowed" }}>Auswerten</button>
+              <button
+                onClick={fetchQuestions}
+                disabled={loading}
+                style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
+              >
+                🔄 Neu laden
+              </button>
               {showResult && (
                 <>
-                  <div style={{ background: CARD, border: `1px solid ${HILITE}`, padding: "8px 10px", borderRadius: 10 }}>
-                    Ergebnis: <b>{questions.filter((q) => answers[q.id] === q.correct_idx).length}</b> / {questions.length}
-                  </div>
-                  <button onClick={() => { setAnswers({}); setShowResult(false); }} style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>Auswahl zurücksetzen</button>
+                  <button
+                    onClick={() => {
+                      setAnswers({});
+                      setShowResult(false);
+                      setSavedAttempt(false);
+                    }}
+                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
+                  >
+                    Auswahl zurücksetzen
+                  </button>
+                  <button
+                    onClick={fetchQuestions}
+                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}
+                  >
+                    ▶︎ Neue Runde
+                  </button>
                 </>
               )}
             </div>
+
+            {/* FRAGENLISTE + Auswerten (unten) */}
+            {!showResult ? (
+              <>
+                <div style={{ display: "grid", gap: 14 }}>
+                  {questions.map((q, i) => (
+                    <QuestionCard
+                      key={q.id}
+                      index={i}
+                      q={q}
+                      selected={answers[q.id]}
+                      onSelect={(idx) => setAnswers((p) => ({ ...p, [q.id]: idx }))}
+                      showResult={false}
+                    />
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                  <button
+                    onClick={async () => {
+                      if (!allAnswered) return;
+                      setShowResult(true);
+                      await saveAttempt();
+                    }}
+                    disabled={!allAnswered}
+                    style={{
+                      padding: "10px 12px",
+                      background: allAnswered ? ACCENT : "#6B7280",
+                      color: "#111827",
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      border: "none",
+                      cursor: allAnswered ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    Auswerten
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 16, padding: 18 }}>
+                <h2 style={{ margin: "4px 0 12px 0", color: "#F3F4F6" }}>Auswertung</h2>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+                  <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, padding: "10px 12px", borderRadius: 10, color: "#E5E7EB" }}>
+                    Punktzahl: <b>{score}</b> / {questions.length}
+                  </div>
+                  <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, padding: "10px 12px", borderRadius: 10, color: "#E5E7EB" }}>
+                    Quote: <b>{Math.round((score / (questions.length || 1)) * 100)}%</b>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 12 }}>
+                  {questions.map((q, i) => (
+                    <QuestionCard key={q.id} index={i} q={q} selected={answers[q.id]} onSelect={() => {}} showResult />
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                  <button
+                    onClick={() => {
+                      setAnswers({});
+                      setShowResult(false);
+                      setSavedAttempt(false);
+                    }}
+                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
+                  >
+                    Auswahl zurücksetzen
+                  </button>
+                  <button
+                    onClick={fetchQuestions}
+                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}
+                  >
+                    ▶︎ Neue Runde
+                  </button>
+                </div>
+              </div>
+            )}
           </>
-        )}
+        ) : tab === "stats" ? (
+          <div style={{ display: "grid", gap: 14 }}>
+            {/* Meine Statistik */}
+            <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>Meine Statistik</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <StatBadge label="Versuche" value={mySummary.count} />
+                <StatBadge label="Durchschnitt" value={`${mySummary.avg}%`} />
+                <StatBadge label="Bestleistung" value={`${mySummary.best}%`} />
+              </div>
+              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                {(myAttempts || []).map((a) => (
+                  <div
+                    key={a.id}
+                    style={{ display: "flex", justifyContent: "space-between", background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}
+                  >
+                    <span style={{ color: "#E5E7EB" }}>{new Date(a.finished_at).toLocaleString()}</span>
+                    <span style={{ color: "#CBD5E1" }}>
+                      {a.score} / {a.total} ({Math.round((a.score / a.total) * 100)}%)
+                    </span>
+                  </div>
+                ))}
+                {myAttempts.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Versuche.</div>}
+              </div>
+            </div>
 
-        {route === "/stats" && <StatsPage role={role} />}
-
-        {route === "/admin" && (
+            {/* Team-Statistik nur für Admin */}
+            {role === "admin" && (
+              <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Team-Statistik</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {(teamAgg || []).map((r) => (
+                    <div
+                      key={r.email}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1.2fr .5fr .7fr .9fr",
+                        gap: 8,
+                        background: "#0B1220",
+                        border: `1px solid ${HILITE}`,
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      <div style={{ color: "#E5E7EB" }}>{r.email}</div>
+                      <div style={{ color: "#CBD5E1" }}>{r.count}×</div>
+                      <div style={{ color: "#CBD5E1" }}>{r.avg}% ⌀ / Best {r.best}%</div>
+                      <div style={{ color: "#9CA3AF", textAlign: "right" }}>{r.lastAt ? new Date(r.lastAt).toLocaleString() : "–"}</div>
+                    </div>
+                  ))}
+                  {teamAgg.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          // ===== Admin =====
           <div style={{ display: "grid", gap: 14 }}>
             <AdminEditor
               editing={editing}
               onCancel={() => setEditing(null)}
-              onSaved={async () => { setEditing(null); await loadAdminList(); }}
+              onSaved={async () => {
+                setEditing(null);
+                await loadAdminList();
+              }}
             />
 
             <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 12 }}>
@@ -500,23 +774,34 @@ export default function App() {
                       <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <span style={{ color: "#9CA3AF" }}>{q.active ? "aktiv" : "inaktiv"}</span>
-                        <button onClick={() => setEditing(q)}
-                          style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}>
+                        <button
+                          onClick={() => setEditing(q)}
+                          style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}
+                        >
                           Bearbeiten
                         </button>
-                        <button onClick={() => removeQuestion(q.id)}
-                          style={{ padding: "6px 10px", background: "#DC2626", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
+                        <button
+                          onClick={() => removeQuestion(q.id)}
+                          style={{ padding: "6px 10px", background: "#DC2626", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}
+                        >
                           Löschen
                         </button>
                       </div>
                     </div>
                     <div style={{ marginTop: 6, color: "#CBD5E1", fontSize: 14 }}>
                       {q.options?.map((o, i) => (
-                        <span key={i} style={{
-                          padding: "2px 8px", borderRadius: 999, marginRight: 6,
-                          border: `1px solid ${i === q.correct_idx ? "#16A34A" : HILITE}`, color: i === q.correct_idx ? "#16A34A" : "#CBD5E1"
-                        }}>
-                          {o}{i === q.correct_idx ? " ✔" : ""}
+                        <span
+                          key={i}
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            marginRight: 6,
+                            border: `1px solid ${i === q.correct_idx ? "#16A34A" : HILITE}`,
+                            color: i === q.correct_idx ? "#16A34A" : "#CBD5E1",
+                          }}
+                        >
+                          {o}
+                          {i === q.correct_idx ? " ✔" : ""}
                         </span>
                       ))}
                     </div>
@@ -530,6 +815,15 @@ export default function App() {
 
         {authMsg && <p style={{ color: "#F87171", whiteSpace: "pre-wrap" }}>{authMsg}</p>}
       </div>
+    </div>
+  );
+}
+
+function StatBadge({ label, value }) {
+  return (
+    <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 10, padding: "8px 10px", color: "#E5E7EB" }}>
+      <div style={{ fontSize: 12, color: "#9CA3AF" }}>{label}</div>
+      <div style={{ fontWeight: 800 }}>{value}</div>
     </div>
   );
 }
