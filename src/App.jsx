@@ -20,6 +20,53 @@ const shuffle = (arr) => {
   return a;
 };
 
+/** ====== Mini Chart Helpers (pure SVG, keine Libs) ====== */
+function Bars({ values = [], width = 320, height = 120, pad = 8, color = ACCENT, bg = "#0B1220" }) {
+  const max = Math.max(1, ...values);
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+  const bw = values.length ? w / values.length - 4 : 0;
+  return (
+    <svg width={width} height={height} style={{ display: "block", background: bg, borderRadius: 10, border: `1px solid ${HILITE}` }}>
+      <rect x="0" y="0" width={width} height={height} fill={bg} rx="10" />
+      {values.map((v, i) => {
+        const bh = (v / max) * h;
+        const x = pad + i * (bw + 4);
+        const y = pad + (h - bh);
+        return <rect key={i} x={x} y={y} width={bw} height={bh} fill={color} rx="3" />;
+      })}
+      {/* Linie für 100% wenn sinnvoll */}
+      <line x1={pad} x2={pad + w} y1={pad} y2={pad} stroke="#334155" strokeDasharray="4 4" />
+    </svg>
+  );
+}
+
+function Sparkline({ values = [], width = 320, height = 60, color = ACCENT, bg = "#0B1220", pad = 8 }) {
+  if (!values.length) return (
+    <svg width={width} height={height} style={{ display: "block", background: bg, borderRadius: 10, border: `1px solid ${HILITE}` }} />
+  );
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+  const normY = (v) => (max === min ? 0.5 : (v - min) / (max - min));
+  const pts = values.map((v, i) => {
+    const x = pad + (i / Math.max(1, values.length - 1)) * w;
+    const y = pad + (1 - normY(v)) * h;
+    return [x, y];
+  });
+  const d = pts.map(([x, y], i) => (i ? `L${x},${y}` : `M${x},${y}`)).join(" ");
+  return (
+    <svg width={width} height={height} style={{ display: "block", background: bg, borderRadius: 10, border: `1px solid ${HILITE}` }}>
+      <rect x="0" y="0" width={width} height={height} fill={bg} rx="10" />
+      <path d={d} fill="none" stroke={color} strokeWidth="2" />
+      {pts.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r="2.5" fill={color} />
+      ))}
+    </svg>
+  );
+}
+
 function Sun() {
   return MERKUR_LOGO_URL ? (
     <img src={MERKUR_LOGO_URL} alt="Merkur" style={{ width: 28, height: 28, borderRadius: "50%" }} />
@@ -166,7 +213,7 @@ export default function App() {
   const [role, setRole] = useState("");
   const [authMsg, setAuthMsg] = useState("");
 
-  /** Tabs (jetzt hash-fähig) */
+  /** Tabs (Hash-Routing) */
   const [tab, setTab] = useState("quiz"); // 'quiz' | 'stats' | 'admin'
 
   /** Quiz */
@@ -189,7 +236,7 @@ export default function App() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  // --- Hash-Routing hinzufügen (NEU) ---
+  /** Hash-Router */
   useEffect(() => {
     const init = () => {
       const h = (window.location.hash || "#quiz").slice(1);
@@ -283,7 +330,7 @@ export default function App() {
       const { error } = await supabase.from("attempts").insert(payload).select("id").single();
       if (error) throw error;
       setSavedAttempt(true);
-      // NEU: Stats gleich nach Speichern aktualisieren, damit der Wechsel zu #stats sofort Daten zeigt
+      // direkt updaten, damit #stats sofort Daten zeigt
       await loadMyStats();
       if (role === "admin") await loadTeamStats();
     } catch (e) {
@@ -291,6 +338,7 @@ export default function App() {
     }
   }
 
+  /** Stats laden */
   async function loadMyStats() {
     setStatsLoading(true);
     try {
@@ -345,6 +393,7 @@ export default function App() {
     }
   }
 
+  /** UI */
   const header = (
     <div style={{
       background: CARD, padding: 16, borderRadius: 16, border: `1px solid ${HILITE}`,
@@ -396,6 +445,15 @@ export default function App() {
     );
   }
 
+  // Daten für Diagramme
+  const last10Pct = (myAttempts || [])
+    .slice(0, 10)
+    .map((a) => Math.round((a.score / Math.max(1, a.total)) * 100))
+    .reverse(); // älteste links
+
+  const leaderboard = (teamAgg || []).slice(0, 8);
+  const leaderboardVals = leaderboard.map((r) => r.avg);
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -405,7 +463,7 @@ export default function App() {
       <div style={{ width: "min(1100px, 94vw)", margin: "0 auto", display: "grid", gap: 18 }}>
         {header}
 
-        {/* Tabs (jetzt auch als echte Links) */}
+        {/* Tabs als Links (#) */}
         <div style={{ display: "flex", gap: 10 }}>
           <a href="#quiz" onClick={(e)=>{e.preventDefault(); goTab("quiz");}}
             style={{
@@ -529,12 +587,31 @@ export default function App() {
             {/* Meine Statistik */}
             <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
               <div style={{ fontWeight: 800, marginBottom: 8 }}>Meine Statistik</div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <StatBadge label="Versuche" value={mySummary.count} />
                 <StatBadge label="Durchschnitt" value={`${mySummary.avg}%`} />
                 <StatBadge label="Bestleistung" value={`${mySummary.best}%`} />
+                <div style={{ marginLeft: "auto" }}>
+                  <button onClick={loadMyStats}
+                    style={{ padding: "8px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+                    ↻ Aktualisieren
+                  </button>
+                </div>
               </div>
-              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+
+              {/* Charts für mich */}
+              <div style={{ marginTop: 12, display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+                <div>
+                  <div style={{ color: "#9CA3AF", marginBottom: 6 }}>Letzte 10 Versuche (Prozent)</div>
+                  <Bars values={last10Pct} width={520} height={140} />
+                </div>
+                <div>
+                  <div style={{ color: "#9CA3AF", marginBottom: 6 }}>Trend (Prozent)</div>
+                  <Sparkline values={last10Pct} width={520} height={140} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 14, display: "grid", gap: 6 }}>
                 {(myAttempts || []).map((a) => (
                   <div key={a.id} style={{ display: "flex", justifyContent: "space-between", background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
                     <span style={{ color: "#E5E7EB" }}>{new Date(a.created_at).toLocaleString()}</span>
@@ -548,9 +625,25 @@ export default function App() {
             {/* Team-Statistik (Admin) */}
             {role === 'admin' && (
               <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Team-Statistik</div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {(teamAgg || []).map((r) => (
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ fontWeight: 800 }}>Team-Statistik</div>
+                  <div style={{ marginLeft: "auto" }}>
+                    <button onClick={loadTeamStats}
+                      style={{ padding: "8px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+                      ↻ Aktualisieren
+                    </button>
+                  </div>
+                </div>
+
+                {/* Leaderboard Balken */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ color: "#9CA3AF", marginBottom: 6 }}>Durchschnitt nach Nutzer (Top 8)</div>
+                  <Bars values={leaderboardVals} width={1060} height={160} />
+                </div>
+
+                {/* Tabelle */}
+                <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+                  {leaderboard.map((r) => (
                     <div key={r.email} style={{ display: "grid", gridTemplateColumns: "1.2fr .5fr .8fr .8fr", gap: 8, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
                       <div style={{ color: "#E5E7EB" }}>{r.email}</div>
                       <div style={{ color: "#CBD5E1" }}>{r.count}×</div>
@@ -558,7 +651,7 @@ export default function App() {
                       <div style={{ color: "#9CA3AF", textAlign: "right" }}>{r.lastAt ? new Date(r.lastAt).toLocaleString() : "–"}</div>
                     </div>
                   ))}
-                  {teamAgg.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
+                  {leaderboard.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
                 </div>
               </div>
             )}
