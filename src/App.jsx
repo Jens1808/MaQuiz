@@ -8,6 +8,7 @@ const DEEP = "#0F172A";
 const CARD = "#111827D9";
 const HILITE = "#1F2937";
 
+const VALID_TABS = ["quiz", "stats", "admin"];
 const asEmail = (name) => (name.includes("@") ? name.trim() : `${name.trim().toUpperCase()}@quiz.local`);
 const range = (n) => Array.from({ length: n }, (_, i) => i);
 const shuffle = (arr) => {
@@ -83,11 +84,10 @@ function QuestionCard({ index, q, selected, onSelect, showResult }) {
   );
 }
 
-/** ===== Admin-Form für eine Frage (mit Kategorie) ===== */
+/** ===== Admin-Form für eine Frage ===== */
 function AdminEditor({ editing, onCancel, onSaved }) {
   const isEdit = !!editing;
   const [text, setText] = useState(editing?.text || "");
-  const [category, setCategory] = useState(editing?.category || "Allgemein"); // NEU
   const [opts, setOpts] = useState(() => {
     const base = editing?.options || ["", "", "", ""];
     return [...base, ...range(Math.max(0, 4 - base.length)).map(() => "")].slice(0, 4);
@@ -112,7 +112,6 @@ function AdminEditor({ editing, onCancel, onSaved }) {
         options: clean,
         correct_idx: correct,
         active,
-        category, // NEU
       };
       const { error } = await supabase.from("questions").upsert(payload).select("id").single();
       if (error) throw error;
@@ -130,12 +129,6 @@ function AdminEditor({ editing, onCancel, onSaved }) {
       <input placeholder="Fragetext"
         value={text} onChange={(e) => setText(e.target.value)}
         style={{ padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
-      <input
-        placeholder="Kategorie (z. B. Allgemein, Sicherheit …)"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        style={{ padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }}
-      />
       {range(4).map((i) => (
         <div key={i} style={{ display: "flex", gap: 10 }}>
           <input placeholder={`Option ${i + 1}`} value={opts[i] || ""}
@@ -173,7 +166,7 @@ export default function App() {
   const [role, setRole] = useState("");
   const [authMsg, setAuthMsg] = useState("");
 
-  /** Tabs */
+  /** Tabs (jetzt hash-fähig) */
   const [tab, setTab] = useState("quiz"); // 'quiz' | 'stats' | 'admin'
 
   /** Quiz */
@@ -195,6 +188,22 @@ export default function App() {
   const [adminList, setAdminList] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [editing, setEditing] = useState(null);
+
+  // --- Hash-Routing hinzufügen (NEU) ---
+  useEffect(() => {
+    const init = () => {
+      const h = (window.location.hash || "#quiz").slice(1);
+      if (VALID_TABS.includes(h)) setTab(h);
+    };
+    const onHash = () => {
+      const h = (window.location.hash || "#quiz").slice(1);
+      if (VALID_TABS.includes(h)) setTab(h);
+    };
+    init();
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const goTab = (t) => { setTab(t); window.location.hash = t; };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -235,6 +244,7 @@ export default function App() {
   async function logout() {
     await supabase.auth.signOut();
     setUser(null); setRole(""); setQuestions([]); setAnswers({}); setShowResult(false); setSavedAttempt(false); setTab("quiz"); setName(""); setPwd("");
+    window.location.hash = "quiz";
   }
 
   async function fetchQuestions() {
@@ -250,7 +260,7 @@ export default function App() {
     } catch (e) { rpcErr = e; }
     try {
       const { data, error } = await supabase.from("questions")
-        .select("id, text, options, correct_idx, active, qtype, category").eq("qtype", "mc").eq("active", true);
+        .select("id, text, options, correct_idx, active, qtype").eq("qtype", "mc").eq("active", true);
       if (error) throw error;
       const pool = (data || []).filter((r) => Array.isArray(r.options) && typeof r.correct_idx === "number");
       const picked = shuffle(pool).slice(0, 20);
@@ -260,7 +270,27 @@ export default function App() {
     } finally { setLoading(false); }
   }
 
-  /** Admin/Stats: Laden */
+  async function saveAttempt() {
+    if (!user || savedAttempt) return;
+    try {
+      const payload = {
+        user_id: user.id,
+        email: user.email,
+        score: score,
+        total: questions.length,
+        details: questions.map((q) => ({ id: q.id, chosen: answers[q.id], correct: q.correct_idx, ok: answers[q.id] === q.correct_idx }))
+      };
+      const { error } = await supabase.from("attempts").insert(payload).select("id").single();
+      if (error) throw error;
+      setSavedAttempt(true);
+      // NEU: Stats gleich nach Speichern aktualisieren, damit der Wechsel zu #stats sofort Daten zeigt
+      await loadMyStats();
+      if (role === "admin") await loadTeamStats();
+    } catch (e) {
+      console.warn("saveAttempt failed:", e.message);
+    }
+  }
+
   async function loadMyStats() {
     setStatsLoading(true);
     try {
@@ -269,7 +299,7 @@ export default function App() {
         .select("id, score, total, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(500);
+        .limit(100);
       if (error) throw error;
       setMyAttempts(data || []);
       const count = data?.length || 0;
@@ -290,7 +320,7 @@ export default function App() {
         .from("attempts")
         .select("user_id, email, score, total, created_at")
         .order("created_at", { ascending: false })
-        .limit(5000);
+        .limit(1000);
       if (error) throw error;
       const byEmail = new Map();
       (data || []).forEach((a) => {
@@ -301,8 +331,8 @@ export default function App() {
       });
       const rows = Array.from(byEmail.entries()).map(([email, arr]) => {
         const count = arr.length;
-        const avg = count ? Math.round((arr.reduce((s, x) => s + x.score / x.total, 0) / count) * 100) : 0;
-        const best = count ? Math.max(...arr.map((x) => Math.round((x.score / x.total) * 100))) : 0;
+        const avg = Math.round((arr.reduce((s, x) => s + x.score / x.total, 0) / count) * 100);
+        const best = Math.max(...arr.map((x) => Math.round((x.score / x.total) * 100)));
         const lastAt = arr[0]?.created_at;
         return { email, count, avg, best, lastAt };
       });
@@ -315,48 +345,6 @@ export default function App() {
     }
   }
 
-  async function removeQuestion(id) {
-    if (!window.confirm("Diese Frage wirklich löschen?")) return;
-    const { error } = await supabase.from("questions").delete().eq("id", id);
-    if (error) { alert(error.message); return; }
-    await loadAdminList();
-  }
-
-  async function loadAdminList() {
-    setAdminLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("id, text, options, correct_idx, active, qtype, category")
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      setAdminList(data || []);
-    } catch (e) {
-      setAuthMsg("Admin-Laden fehlgeschlagen: " + e.message);
-    } finally {
-      setAdminLoading(false);
-    }
-  }
-
-  async function saveAttempt() {
-    if (!user || savedAttempt) return;
-    try {
-      const payload = {
-        user_id: user.id,
-        email: user.email,
-        score: score,
-        total: questions.length,
-        details: questions.map((q) => ({ id: q.id, chosen: answers[q.id], correct: q.correct_idx, ok: answers[q.id] === q.correct_idx }))
-      };
-      const { error } = await supabase.from("attempts").insert(payload).select("id").single();
-      if (error) throw error;
-      setSavedAttempt(true);
-    } catch (e) {
-      console.warn("saveAttempt failed:", e.message);
-    }
-  }
-
   const header = (
     <div style={{
       background: CARD, padding: 16, borderRadius: 16, border: `1px solid ${HILITE}`,
@@ -366,26 +354,7 @@ export default function App() {
         <Sun />
         <div style={{ fontWeight: 800, fontSize: 20, color: "#E5E7EB" }}>MaQuiz</div>
       </div>
-
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        {/* Quick Links zu Extra-Seiten */}
-        <button
-          onClick={() => (window.location.href = "/me")}
-          title="Meine Statistik"
-          style={{ padding: "8px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
-        >
-          📈 Meine Statistik
-        </button>
-        {role === "admin" && (
-          <button
-            onClick={() => (window.location.href = "/admin")}
-            title="Admin-Dashboard"
-            style={{ padding: "8px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}
-          >
-            🛠️ Admin-Dashboard
-          </button>
-        )}
-
         {user && (
           <span style={{ color: "#9CA3AF", fontSize: 14 }}>
             Angemeldet als <b style={{ color: "#E5E7EB" }}>{user.email}</b>{role === "admin" ? " · Admin" : ""}
@@ -436,36 +405,36 @@ export default function App() {
       <div style={{ width: "min(1100px, 94vw)", margin: "0 auto", display: "grid", gap: 18 }}>
         {header}
 
-        {/* Tabs */}
+        {/* Tabs (jetzt auch als echte Links) */}
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setTab("quiz")}
+          <a href="#quiz" onClick={(e)=>{e.preventDefault(); goTab("quiz");}}
             style={{
-              padding: "10px 12px", borderRadius: 10,
+              padding: "10px 12px", borderRadius: 10, textDecoration: "none",
               background: tab === "quiz" ? ACCENT : "#0B1220",
               color: tab === "quiz" ? "#111827" : "#E5E7EB",
               border: tab === "quiz" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer"
             }}>
             Quiz
-          </button>
-          <button onClick={() => setTab("stats")}
+          </a>
+          <a href="#stats" onClick={(e)=>{e.preventDefault(); goTab("stats");}}
             style={{
-              padding: "10px 12px", borderRadius: 10,
+              padding: "10px 12px", borderRadius: 10, textDecoration: "none",
               background: tab === "stats" ? ACCENT : "#0B1220",
               color: tab === "stats" ? "#111827" : "#E5E7EB",
               border: tab === "stats" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer"
             }}>
             Statistik
-          </button>
+          </a>
           {role === "admin" && (
-            <button onClick={() => { setTab("admin"); loadAdminList(); }}
+            <a href="#admin" onClick={(e)=>{e.preventDefault(); goTab("admin"); loadAdminList();}}
               style={{
-                padding: "10px 12px", borderRadius: 10,
+                padding: "10px 12px", borderRadius: 10, textDecoration: "none",
                 background: tab === "admin" ? ACCENT : "#0B1220",
                 color: tab === "admin" ? "#111827" : "#E5E7EB",
                 border: tab === "admin" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer"
               }}>
               Admin
-            </button>
+            </a>
           )}
           <div style={{ marginLeft: "auto", color: "#9CA3AF" }}>
             {tab === "quiz" && (loading ? "Lade Fragen…" : `${questions.length} Fragen geladen${showResult ? ` · Ergebnis: ${score}/${questions.length}` : ""}`)}
@@ -510,11 +479,11 @@ export default function App() {
                 </div>
                 {/* AUSWERTEN – unten */}
                 <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                  <button onClick={async () => {
+                  <button
+                    onClick={async () => {
                       if (!allAnswered) return;
                       setShowResult(true);
                       await saveAttempt();
-                      if (tab === "stats") { await loadMyStats(); if (role === "admin") await loadTeamStats(); }
                     }}
                     disabled={!allAnswered}
                     style={{
@@ -576,16 +545,16 @@ export default function App() {
               </div>
             </div>
 
-            {/* Team-Statistik nur für Admin */}
+            {/* Team-Statistik (Admin) */}
             {role === 'admin' && (
               <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
                 <div style={{ fontWeight: 800, marginBottom: 8 }}>Team-Statistik</div>
                 <div style={{ display: "grid", gap: 6 }}>
                   {(teamAgg || []).map((r) => (
-                    <div key={r.email} style={{ display: "grid", gridTemplateColumns: "1.2fr .5fr .5fr .8fr", gap: 8, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
+                    <div key={r.email} style={{ display: "grid", gridTemplateColumns: "1.2fr .5fr .8fr .8fr", gap: 8, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
                       <div style={{ color: "#E5E7EB" }}>{r.email}</div>
                       <div style={{ color: "#CBD5E1" }}>{r.count}×</div>
-                      <div style={{ color: "#CBD5E1" }}>{r.avg}% ⌀ / Best {r.best}%</div>
+                      <div style={{ color: "#CBD5E1" }}>{r.avg}% ⌀ · Best {r.best}%</div>
                       <div style={{ color: "#9CA3AF", textAlign: "right" }}>{r.lastAt ? new Date(r.lastAt).toLocaleString() : "–"}</div>
                     </div>
                   ))}
@@ -610,10 +579,8 @@ export default function App() {
                   <div key={q.id} style={{ border: `1px solid ${HILITE}`, borderRadius: 10, padding: 10, background: "#0B1220" }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ color: "#9CA3AF" }}>
-                          {q.active ? "aktiv" : "inaktiv"} · {q.category || "Allgemein"}
-                        </span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <span style={{ color: "#9CA3AF" }}>{q.active ? "aktiv" : "inaktiv"}</span>
                         <button onClick={() => setEditing(q)}
                           style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}>
                           Bearbeiten
