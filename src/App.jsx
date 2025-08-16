@@ -20,6 +20,15 @@ const shuffle = (arr) => {
   }
   return a;
 };
+const pct = (score, total) => Math.round((score / Math.max(1, total)) * 100);
+
+/** ===== Level / Ränge ===== */
+function rankFromPercent(p) {
+  if (p >= 95) return { name: "Merkur Master", color: "#10B981" };
+  if (p >= 80) return { name: "Gold", color: "#F59E0B" };
+  if (p >= 60) return { name: "Silber", color: "#A1A1AA" };
+  return { name: "Bronze", color: "#B45309" };
+}
 
 /** ===== Mini-Chart-Komponenten (SVG, ohne Libs) ===== */
 function Sparkline({ values = [], width = 280, height = 60 }) {
@@ -104,7 +113,7 @@ function Sun() {
   );
 }
 
-/** ===== Quiz-Karte (mit rot/grün Umrandung bei showResult) ===== */
+/** ===== Quiz-Karte ===== */
 function QuestionCard({ index, q, selected, onSelect, showResult }) {
   const isCorrect = showResult && selected === q.correct_idx;
   const isWrong = showResult && selected != null && selected !== q.correct_idx;
@@ -148,7 +157,7 @@ function QuestionCard({ index, q, selected, onSelect, showResult }) {
   );
 }
 
-/** ===== Admin-Editor ===== */
+/** ===== Admin-Form ===== */
 function AdminEditor({ editing, onCancel, onSaved }) {
   const isEdit = !!editing;
   const [text, setText] = useState(editing?.text || "");
@@ -158,6 +167,7 @@ function AdminEditor({ editing, onCancel, onSaved }) {
   });
   const [correct, setCorrect] = useState(editing?.correct_idx ?? 0);
   const [active, setActive] = useState(editing?.active ?? true);
+  const [category, setCategory] = useState(editing?.category || "Allgemein");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -176,6 +186,7 @@ function AdminEditor({ editing, onCancel, onSaved }) {
         options: clean,
         correct_idx: Math.min(correct, clean.length - 1),
         active,
+        category: category || "Allgemein",
       };
       const { error } = await supabase.from("questions").upsert(payload).select("id").single();
       if (error) throw error;
@@ -192,19 +203,26 @@ function AdminEditor({ editing, onCancel, onSaved }) {
       <div style={{ fontWeight: 700, color: "#E5E7EB" }}>{isEdit ? "Frage bearbeiten" : "Neue Frage anlegen"}</div>
       <input placeholder="Fragetext" value={text} onChange={(e) => setText(e.target.value)}
         style={{ padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
-      {range(4).map((i) => (
-        <div key={i} style={{ display: "flex", gap: 10 }}>
-          <input placeholder={`Option ${i + 1}`} value={opts[i] || ""}
-            onChange={(e) => setOpts((p) => { const c = p.slice(); c[i] = e.target.value; return c; })}
-            style={{ flex: 1, padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#E5E7EB" }}>
-            <input type="radio" name="correct" checked={correct === i} onChange={() => setCorrect(i)} /> korrekt
-          </label>
-        </div>
-      ))}
-      <label style={{ color: "#E5E7EB", display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> aktiv
-      </label>
+      <div style={{ display: "grid", gap: 6 }}>
+        {range(4).map((i) => (
+          <div key={i} style={{ display: "flex", gap: 10 }}>
+            <input placeholder={`Option ${i + 1}`} value={opts[i] || ""}
+              onChange={(e) => setOpts((p) => { const c = p.slice(); c[i] = e.target.value; return c; })}
+              style={{ flex: 1, padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
+            <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#E5E7EB" }}>
+              <input type="radio" name="correct" checked={correct === i} onChange={() => setCorrect(i)} /> korrekt
+            </label>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <input placeholder="Kategorie (z. B. Gesetze, Technik, Brandschutz)" value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ flex: 1, padding: "10px 12px", background: "#0B1220", color: "#E5E7EB", borderRadius: 10, border: `1px solid ${HILITE}` }} />
+        <label style={{ color: "#E5E7EB", display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> aktiv
+        </label>
+      </div>
       {err && <div style={{ color: "#F87171" }}>{err}</div>}
       <div style={{ display: "flex", gap: 10 }}>
         <button onClick={save} disabled={saving}
@@ -231,7 +249,7 @@ export default function App() {
   const [authMsg, setAuthMsg] = useState("");
 
   /** Tabs */
-  const [tab, setTab] = useState("quiz"); // 'quiz' | 'stats' | 'admin'
+  const [tab, setTab] = useState("quiz"); // 'quiz' | 'stats' | 'rank' | 'admin'
 
   /** Quiz */
   const [loading, setLoading] = useState(false);
@@ -242,10 +260,13 @@ export default function App() {
   const allAnswered = questions.length > 0 && questions.every((q) => answers[q.id] != null);
   const score = useMemo(() => questions.filter((q) => answers[q.id] === q.correct_idx).length, [answers, questions]);
 
-  /** Stats */
+  /** Stats (User & Admin) */
   const [myAttempts, setMyAttempts] = useState([]);
   const [mySummary, setMySummary] = useState({ count: 0, avg: 0, best: 0 });
   const [teamAgg, setTeamAgg] = useState([]);
+  const [qStats, setQStats] = useState([]);     // v_question_stats
+  const [catStats, setCatStats] = useState([]); // v_category_stats
+  const [leaderboard, setLeaderboard] = useState([]); // v_leaderboard
   const [statsLoading, setStatsLoading] = useState(false);
 
   /** Admin */
@@ -259,18 +280,18 @@ export default function App() {
       const u = data?.user || null;
       setUser(u);
       setRole(u?.app_metadata?.role || "user");
-      if (u) fetchQuestions();
+      if (u) { fetchQuestions(); refreshMyStats(); }
     });
   }, []);
 
-  // Wenn Tab gewechselt wird: Stats nachladen
+  // Tab-Wechsel: Daten nachladen
   useEffect(() => {
-    if (tab === "stats" && user) {
-      loadMyStats();
-      if (role === "admin") loadTeamStats();
-    }
+    if (!user) return;
+    if (tab === "stats") refreshMyStats();
+    if (tab === "rank") loadLeaderboard();
     if (tab === "admin" && role === "admin") {
       loadAdminList();
+      loadAdminStats();
     }
   }, [tab, user, role]);
 
@@ -292,6 +313,7 @@ export default function App() {
     setUser(data.user);
     setRole(data.user?.app_metadata?.role || "user");
     fetchQuestions();
+    refreshMyStats();
   }
 
   async function logout() {
@@ -300,46 +322,37 @@ export default function App() {
     setTab("quiz"); setName(""); setPwd("");
   }
 
+  /** Fragen laden (RPC → Fallback) */
   async function fetchQuestions() {
     setLoading(true); setAnswers({}); setShowResult(false); setSavedAttempt(false);
     let fallbackErr = null;
-
-    // 1) Optional: RPC nutzen, wenn vorhanden
     try {
       const { data, error } = await supabase.rpc("get_random_questions_mc", { limit_count: 20 });
       if (!error && Array.isArray(data) && data.length) {
         setQuestions(data.map((r) => ({ id: r.id, text: r.text, options: r.options || [], correct_idx: r.correct_idx ?? null })));
         setLoading(false); return;
       }
-    } catch (e) {
-      fallbackErr = e;
-    }
-
-    // 2) Fallback: Direkt aus questions lesen (aktive MC)
+    } catch (e) { fallbackErr = e; }
     try {
       const { data, error } = await supabase
         .from("questions")
-        .select("id, text, options, correct_idx, active, qtype")
-        .eq("qtype", "mc")
-        .eq("active", true);
+        .select("id, text, options, correct_idx, active, qtype, category")
+        .eq("qtype", "mc").eq("active", true);
       if (error) throw error;
       const pool = (data || []).filter((r) => Array.isArray(r.options) && typeof r.correct_idx === "number");
       const picked = shuffle(pool).slice(0, 20);
       setQuestions(picked.map((r) => ({ id: r.id, text: r.text, options: r.options, correct_idx: r.correct_idx })));
-      if (picked.length === 0) {
-        setAuthMsg("Keine aktiven Multiple-Choice-Fragen gefunden. Lege im Admin-Tab Fragen an oder prüfe RLS-Policies.");
-      }
+      if (picked.length === 0) setAuthMsg("Keine aktiven MC-Fragen gefunden.");
     } catch (e2) {
       setAuthMsg("Fehler beim Laden der Fragen:\n" + (fallbackErr?.message || "") + "\n" + e2.message);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
+  /** Versuch speichern → Rangliste & Stats */
   async function saveAttempt() {
     if (!user || savedAttempt) return;
     try {
-      const started = Date.now() - 30000; // grobe Dauer (30s) – optional ersetzen
+      const started = Date.now() - 30000;
       const payload = {
         user_id: user.id,
         email: user.email,
@@ -353,12 +366,18 @@ export default function App() {
       const { error } = await supabase.from("attempts").insert(payload).select("id").single();
       if (error) throw error;
       setSavedAttempt(true);
+      // gleich aktualisieren:
+      refreshMyStats();
+      if (tab === "rank") loadLeaderboard();
+      if (role === "admin" && tab === "admin") loadAdminStats();
     } catch (e) {
       console.warn("saveAttempt failed:", e.message);
     }
   }
 
-  async function loadMyStats() {
+  /** Eigene Stats */
+  async function refreshMyStats() {
+    if (!user) return;
     setStatsLoading(true);
     try {
       const { data, error } = await supabase
@@ -366,67 +385,46 @@ export default function App() {
         .select("id, score, total, finished_at")
         .eq("user_id", user.id)
         .order("finished_at", { ascending: true })
-        .limit(200);
+        .limit(300);
       if (error) throw error;
       setMyAttempts(data || []);
       const count = data?.length || 0;
       const avg = count ? Math.round((data.reduce((s, a) => s + a.score / a.total, 0) / count) * 100) : 0;
-      const best = count ? Math.max(...data.map((a) => Math.round((a.score / a.total) * 100))) : 0;
+      const best = count ? Math.max(...data.map((a) => pct(a.score, a.total))) : 0;
       setMySummary({ count, avg, best });
     } catch (e) {
       setAuthMsg("Konnte Nutzer-Statistik nicht laden: " + e.message);
-    } finally {
-      setStatsLoading(false);
-    }
+    } finally { setStatsLoading(false); }
   }
 
-  async function loadTeamStats() {
-    setStatsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("attempts")
-        .select("user_id, email, score, total, finished_at")
-        .order("finished_at", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      const byEmail = new Map();
-      (data || []).forEach((a) => {
-        const key = a.email || a.user_id;
-        const arr = byEmail.get(key) || [];
-        arr.push(a);
-        byEmail.set(key, arr);
-      });
-      const rows = Array.from(byEmail.entries()).map(([email, arr]) => {
-        const count = arr.length;
-        const avg = Math.round((arr.reduce((s, x) => s + x.score / x.total, 0) / count) * 100);
-        const best = Math.max(...arr.map((x) => Math.round((x.score / x.total) * 100)));
-        const lastAt = arr[0]?.finished_at;
-        return { email, count, avg, best, lastAt };
-      });
-      rows.sort((a, b) => b.avg - a.avg || b.best - a.best);
-      setTeamAgg(rows);
-    } catch (e) {
-      setAuthMsg("Konnte Team-Statistik nicht laden: " + e.message);
-    } finally {
-      setStatsLoading(false);
-    }
+  /** Rangliste (Highscore) */
+  async function loadLeaderboard() {
+    const { data, error } = await supabase.from("v_leaderboard").select("*").order("avg_pct", { ascending: false }).limit(100);
+    if (!error) setLeaderboard(data || []);
   }
 
+  /** Admin: Fragenliste + Admin-Stats (Frage/Kategorie) */
   async function loadAdminList() {
     setAdminLoading(true);
     try {
       const { data, error } = await supabase
         .from("questions")
-        .select("id, text, options, correct_idx, active, qtype, created_at")
+        .select("id, text, options, correct_idx, active, qtype, category, created_at")
         .order("created_at", { ascending: false })
         .limit(1000);
       if (error) throw error;
       setAdminList(data || []);
     } catch (e) {
       setAuthMsg("Admin-Laden fehlgeschlagen: " + e.message);
-    } finally {
-      setAdminLoading(false);
-    }
+    } finally { setAdminLoading(false); }
+  }
+  async function loadAdminStats() {
+    const [qs, cs] = await Promise.all([
+      supabase.from("v_question_stats").select("*").order("accuracy", { ascending: true }).limit(500),
+      supabase.from("v_category_stats").select("*").order("avg_accuracy", { ascending: false })
+    ]);
+    if (!qs.error) setQStats(qs.data || []);
+    if (!cs.error) setCatStats(cs.data || []);
   }
 
   async function removeQuestion(id) {
@@ -434,6 +432,19 @@ export default function App() {
     const { error } = await supabase.from("questions").delete().eq("id", id);
     if (error) { alert(error.message); return; }
     await loadAdminList();
+    await loadAdminStats();
+  }
+
+  /** CSV-Export (Admin) */
+  function exportCSV(rows, headers, filename = "export.csv") {
+    const head = headers.map(h => `"${h.label}"`).join(";");
+    const body = rows.map(r => headers.map(h => `"${(r[h.key] ?? "").toString().replace(/"/g,'""')}"`).join(";")).join("\n");
+    const csv = head + "\n" + body;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
   const header = (
@@ -461,6 +472,7 @@ export default function App() {
     </div>
   );
 
+  /** ===== Login ===== */
   if (!user) {
     return (
       <div style={{
@@ -468,7 +480,7 @@ export default function App() {
         background: `radial-gradient(1000px 600px at -10% -10%, rgba(255,211,0,.15), transparent 50%), ${DEEP}`,
         display: "grid", placeItems: "center", color: "#E5E7EB", padding: 20
       }}>
-        <div style={{ width: "min(680px, 94vw)", background: CARD, padding: 26, borderRadius: 18, boxShadow: "0 6px 26px rgba(0,0,0,.45)", border: `1px solid ${HILITE}` }}>
+        <div style={{ width: "min(700px, 94vw)", background: CARD, padding: 26, borderRadius: 18, boxShadow: "0 6px 26px rgba(0,0,0,.45)", border: `1px solid ${HILITE}` }}>
           {header}
           <h2 style={{ marginTop: 20, marginBottom: 12, color: "#F3F4F6" }}>Login</h2>
           <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
@@ -487,222 +499,318 @@ export default function App() {
     );
   }
 
+  /** ===== App Layout ===== */
   return (
     <div style={{
       minHeight: "100vh",
       background: `radial-gradient(1200px 700px at 105% -10%, rgba(255,211,0,.12), transparent 55%), ${DEEP}`,
       padding: 20, color: "#E5E7EB"
     }}>
-      <div style={{ width: "min(1100px, 94vw)", margin: "0 auto", display: "grid", gap: 18 }}>
+      <div style={{ width: "min(1150px, 94vw)", margin: "0 auto", display: "grid", gap: 18 }}>
         {header}
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setTab("quiz")}
-            style={{ padding: "10px 12px", borderRadius: 10,
-              background: tab === "quiz" ? ACCENT : "#0B1220",
-              color: tab === "quiz" ? "#111827" : "#E5E7EB",
-              border: tab === "quiz" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>
-            Quiz
-          </button>
-          <button onClick={() => setTab("stats")}
-            style={{ padding: "10px 12px", borderRadius: 10,
-              background: tab === "stats" ? ACCENT : "#0B1220",
-              color: tab === "stats" ? "#111827" : "#E5E7EB",
-              border: tab === "stats" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>
-            Statistik
-          </button>
-          {role === "admin" && (
-            <button onClick={() => setTab("admin")}
-              style={{ padding: "10px 12px", borderRadius: 10,
-                background: tab === "admin" ? ACCENT : "#0B1220",
-                color: tab === "admin" ? "#111827" : "#E5E7EB",
-                border: tab === "admin" ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer" }}>
-              Admin
-            </button>
-          )}
+          <TabBtn active={tab==="quiz"} onClick={()=>setTab("quiz")}>Quiz</TabBtn>
+          <TabBtn active={tab==="stats"} onClick={()=>{ setTab("stats"); refreshMyStats(); }}>Statistik</TabBtn>
+          <TabBtn active={tab==="rank"} onClick={()=>{ setTab("rank"); loadLeaderboard(); }}>Rangliste</TabBtn>
+          {role === "admin" && <TabBtn active={tab==="admin"} onClick={()=>{ setTab("admin"); loadAdminList(); loadAdminStats(); }}>Admin</TabBtn>}
           <div style={{ marginLeft: "auto", color: "#9CA3AF" }}>
             {tab === "quiz" && (loading ? "Lade Fragen…" : `${questions.length} Fragen geladen${showResult ? ` · Ergebnis: ${score}/${questions.length}` : ""}`)}
             {tab === "stats" && (statsLoading ? "Lade Statistik…" : "")}
+            {tab === "rank" && (leaderboard.length ? `${leaderboard.length} Einträge` : "")}
             {tab === "admin" && (adminLoading ? "Lade…" : `${adminList.length} Fragen`)}
           </div>
         </div>
 
-        {/* Inhalte */}
+        {/* Inhalt */}
         {tab === "quiz" ? (
-          <>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={fetchQuestions} disabled={loading}
-                style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                🔄 Neu laden
-              </button>
-              {showResult && (
-                <>
-                  <button onClick={() => { setAnswers({}); setShowResult(false); setSavedAttempt(false); }}
-                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                    Auswahl zurücksetzen
-                  </button>
-                  <button onClick={fetchQuestions}
-                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
-                    ▶︎ Neue Runde
-                  </button>
-                </>
-              )}
-            </div>
-
-            {!showResult ? (
-              <>
-                <div style={{ display: "grid", gap: 14 }}>
-                  {questions.map((q, i) => (
-                    <QuestionCard key={q.id} index={i} q={q}
-                      selected={answers[q.id]}
-                      onSelect={(idx) => setAnswers((p) => ({ ...p, [q.id]: idx }))}
-                      showResult={false} />
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                  <button onClick={async () => {
-                      if (!allAnswered) return;
-                      setShowResult(true);
-                      await saveAttempt(); // Speichert Versuch → taucht in Statistik auf
-                    }}
-                    disabled={!allAnswered}
-                    style={{ padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280",
-                      color: "#111827", borderRadius: 10, fontWeight: 800, border: "none",
-                      cursor: allAnswered ? "pointer" : "not-allowed" }}>
-                    Auswerten
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 16, padding: 18 }}>
-                <h2 style={{ margin: "4px 0 12px 0", color: "#F3F4F6" }}>Auswertung</h2>
-                <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
-                  <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, padding: "10px 12px", borderRadius: 10, color: "#E5E7EB" }}>
-                    Punktzahl: <b>{score}</b> / {questions.length}
-                  </div>
-                  <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, padding: "10px 12px", borderRadius: 10, color: "#E5E7EB" }}>
-                    Quote: <b>{Math.round((score / (questions.length || 1)) * 100)}%</b>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gap: 12 }}>
-                  {questions.map((q, i) => (
-                    <QuestionCard key={q.id} index={i} q={q} selected={answers[q.id]} onSelect={() => {}} showResult />
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                  <button onClick={() => { setAnswers({}); setShowResult(false); setSavedAttempt(false); }}
-                    style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
-                    Auswahl zurücksetzen
-                  </button>
-                  <button onClick={fetchQuestions}
-                    style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
-                    ▶︎ Neue Runde
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+          <QuizView
+            questions={questions}
+            answers={answers}
+            setAnswers={setAnswers}
+            allAnswered={allAnswered}
+            showResult={showResult}
+            setShowResult={setShowResult}
+            score={score}
+            fetchQuestions={fetchQuestions}
+            saveAttempt={saveAttempt}
+            setSavedAttempt={setSavedAttempt}
+            loading={loading}
+          />
         ) : tab === "stats" ? (
-          <div style={{ display: "grid", gap: 14 }}>
-            {/* Meine Statistik */}
-            <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
-              <div style={{ fontWeight: 800, marginBottom: 8 }}>Meine Statistik</div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                  <StatBadge label="Versuche" value={mySummary.count} />
-                  <StatBadge label="Durchschnitt" value={`${mySummary.avg}%`} />
-                  <StatBadge label="Bestleistung" value={`${mySummary.best}%`} />
-                </div>
-                <Donut value={myAttempts.length ? Math.round((myAttempts[myAttempts.length - 1].score / myAttempts[myAttempts.length - 1].total) * 100) : 0} />
-              </div>
-
-              <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 10, padding: 10 }}>
-                  <div style={{ color: "#E5E7EB", marginBottom: 6, fontWeight: 600 }}>Verlauf (%)</div>
-                  <Sparkline values={(myAttempts || []).map((a) => Math.round((a.score / a.total) * 100))} width={560} height={70} />
-                </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {(myAttempts || []).slice().reverse().map((a) => (
-                    <div key={a.id} style={{ display: "flex", justifyContent: "space-between", background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
-                      <span style={{ color: "#E5E7EB" }}>{new Date(a.finished_at).toLocaleString()}</span>
-                      <span style={{ color: "#CBD5E1" }}>{a.score} / {a.total} ({Math.round((a.score / a.total) * 100)}%)</span>
-                    </div>
-                  ))}
-                  {myAttempts.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Versuche.</div>}
-                </div>
-              </div>
-            </div>
-
-            {/* Team-Statistik (Admin) */}
-            {role === "admin" && (
-              <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Team-Statistik</div>
-                <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-                  <div style={{ color: "#E5E7EB", marginBottom: 6, fontWeight: 600 }}>⌀ Durchschnitt pro Mitarbeiter (Top 10)</div>
-                  <Bars rows={teamAgg.slice(0, 10).map((r) => ({ label: (r.email || "").split("@")[0], value: r.avg }))} width={640} height={240} />
-                </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {(teamAgg || []).map((r) => (
-                    <div key={r.email} style={{ display: "grid", gridTemplateColumns: "1.2fr .5fr .5fr .8fr", gap: 8, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
-                      <div style={{ color: "#E5E7EB" }}>{r.email}</div>
-                      <div style={{ color: "#CBD5E1" }}>{r.count}×</div>
-                      <div style={{ color: "#CBD5E1" }}>{r.avg}% ⌀ / Best {r.best}%</div>
-                      <div style={{ color: "#9CA3AF", textAlign: "right" }}>{r.lastAt ? new Date(r.lastAt).toLocaleString() : "–"}</div>
-                    </div>
-                  ))}
-                  {teamAgg.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
-                </div>
-              </div>
-            )}
-          </div>
+          <MyStatsView myAttempts={myAttempts} mySummary={mySummary} />
+        ) : tab === "rank" ? (
+          <RankView leaderboard={leaderboard} currentEmail={user?.email} />
         ) : (
-          // ===== Admin =====
-          <div style={{ display: "grid", gap: 14 }}>
-            <AdminEditor
-              editing={editing}
-              onCancel={() => setEditing(null)}
-              onSaved={async () => { setEditing(null); await loadAdminList(); }}
-            />
-            <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 12 }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Fragen (neueste zuerst)</div>
-              <div style={{ display: "grid", gap: 8 }}>
-                {adminList.map((q) => (
-                  <div key={q.id} style={{ border: `1px solid ${HILITE}`, borderRadius: 10, padding: 10, background: "#0B1220" }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <span style={{ color: "#9CA3AF" }}>{q.active ? "aktiv" : "inaktiv"}</span>
-                        <button onClick={() => setEditing(q)}
-                          style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}>
-                          Bearbeiten
-                        </button>
-                        <button onClick={() => removeQuestion(q.id)}
-                          style={{ padding: "6px 10px", background: "#DC2626", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
-                          Löschen
-                        </button>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: 6, color: "#CBD5E1", fontSize: 14 }}>
-                      {q.options?.map((o, i) => (
-                        <span key={i} style={{
-                          padding: "2px 8px", borderRadius: 999, marginRight: 6,
-                          border: `1px solid ${i === q.correct_idx ? "#16A34A" : HILITE}`, color: i === q.correct_idx ? "#16A34A" : "#CBD5E1"
-                        }}>
-                          {o}{i === q.correct_idx ? " ✔" : ""}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {adminList.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Fragen gefunden.</div>}
-              </div>
-            </div>
-          </div>
+          <AdminView
+            adminList={adminList}
+            setEditing={setEditing}
+            removeQuestion={removeQuestion}
+            editing={editing}
+            onSaved={async ()=>{ setEditing(null); await loadAdminList(); await loadAdminStats(); }}
+            qStats={qStats}
+            catStats={catStats}
+            exportCSV={exportCSV}
+          />
         )}
 
         {authMsg && <p style={{ color: "#F87171", whiteSpace: "pre-wrap" }}>{authMsg}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** ===== Views ===== */
+
+function TabBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick}
+      style={{
+        padding: "10px 12px", borderRadius: 10,
+        background: active ? ACCENT : "#0B1220",
+        color: active ? "#111827" : "#E5E7EB",
+        border: active ? "none" : `1px solid ${HILITE}`, fontWeight: 800, cursor: "pointer"
+      }}>
+      {children}
+    </button>
+  );
+}
+
+function QuizView({ questions, answers, setAnswers, allAnswered, showResult, setShowResult, score, fetchQuestions, saveAttempt, setSavedAttempt, loading }) {
+  return (
+    <>
+      {/* nur „Neu laden“ oben */}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={fetchQuestions} disabled={loading}
+          style={{ padding: "10px 12px", background: "#0B1220", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+          🔄 Neu laden
+        </button>
+      </div>
+
+      {!showResult ? (
+        <>
+          <div style={{ display: "grid", gap: 14 }}>
+            {questions.map((q, i) => (
+              <QuestionCard key={q.id} index={i} q={q}
+                selected={answers[q.id]}
+                onSelect={(idx) => setAnswers((p) => ({ ...p, [q.id]: idx }))}
+                showResult={false} />
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button onClick={async () => { if (!allAnswered) return; setShowResult(true); await saveAttempt(); }}
+              disabled={!allAnswered}
+              style={{ padding: "10px 12px", background: allAnswered ? ACCENT : "#6B7280",
+                color: "#111827", borderRadius: 10, fontWeight: 800, border: "none",
+                cursor: allAnswered ? "pointer" : "not-allowed" }}>
+              Auswerten
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 16, padding: 18 }}>
+          <h2 style={{ margin: "4px 0 12px 0", color: "#F3F4F6" }}>Auswertung</h2>
+          <div style={{ display: "flex", gap: 18, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+            <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, padding: "10px 12px", borderRadius: 10, color: "#E5E7EB" }}>
+              Punktzahl: <b>{score}</b> / {questions.length}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Donut value={pct(score, questions.length)} />
+              <RankBadge percent={pct(score, questions.length)} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 12 }}>
+            {questions.map((q, i) => (
+              <QuestionCard key={q.id} index={i} q={q} selected={answers[q.id]} onSelect={() => {}} showResult />
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button onClick={() => { setAnswers({}); setShowResult(false); setSavedAttempt(false); }}
+              style={{ padding: "10px 12px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 10, cursor: "pointer" }}>
+              Auswahl zurücksetzen
+            </button>
+            <button onClick={fetchQuestions}
+              style={{ padding: "10px 12px", background: ACCENT, color: "#111827", borderRadius: 10, fontWeight: 800, border: "none", cursor: "pointer" }}>
+              ▶︎ Neue Runde
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RankBadge({ percent }) {
+  const r = rankFromPercent(percent);
+  return (
+    <div style={{ border: `2px solid ${r.color}`, color: r.color, borderRadius: 10, padding: "8px 10px", fontWeight: 800 }}>
+      Rang: {r.name}
+    </div>
+  );
+}
+
+function MyStatsView({ myAttempts, mySummary }) {
+  const lastPct = myAttempts.length ? pct(myAttempts[myAttempts.length - 1].score, myAttempts[myAttempts.length - 1].total) : 0;
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Meine Statistik</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <StatBadge label="Versuche" value={mySummary.count} />
+            <StatBadge label="Durchschnitt" value={`${mySummary.avg}%`} />
+            <StatBadge label="Bestleistung" value={`${mySummary.best}%`} />
+            <RankBadge percent={lastPct} />
+          </div>
+          <Donut value={lastPct} />
+        </div>
+
+        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+          <div style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 10, padding: 10 }}>
+            <div style={{ color: "#E5E7EB", marginBottom: 6, fontWeight: 600 }}>Verlauf (%)</div>
+            <Sparkline values={(myAttempts || []).map((a) => pct(a.score, a.total))} width={560} height={70} />
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {(myAttempts || []).slice().reverse().map((a) => (
+              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
+                <span style={{ color: "#E5E7EB" }}>{new Date(a.finished_at).toLocaleString()}</span>
+                <span style={{ color: "#CBD5E1" }}>{a.score} / {a.total} ({pct(a.score, a.total)}%)</span>
+              </div>
+            ))}
+            {myAttempts.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Versuche.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RankView({ leaderboard, currentEmail }) {
+  return (
+    <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+      <div style={{ fontWeight: 800, marginBottom: 8 }}>Rangliste (⌀-Prozent)</div>
+      <div style={{ display: "grid", gap: 6 }}>
+        {leaderboard.map((r, i) => {
+          const me = currentEmail && r.email === currentEmail;
+          const rk = rankFromPercent(r.avg_pct ?? 0);
+          return (
+            <div key={r.email} style={{
+              display: "grid", gridTemplateColumns: "48px 1fr 120px 160px 160px",
+              gap: 8, alignItems: "center", background: me ? "#0E1930" : "#0B1220",
+              border: `1px solid ${me ? rk.color : HILITE}`, borderRadius: 8, padding: "8px 10px"
+            }}>
+              <div style={{ color: "#E5E7EB", fontWeight: 800 }}>#{i + 1}</div>
+              <div style={{ color: "#E5E7EB" }}>{r.email}</div>
+              <div style={{ color: "#CBD5E1" }}>{r.attempts} Versuche</div>
+              <div style={{ color: "#E5E7EB" }}>⌀ {r.avg_pct ?? 0}% · Best {r.best_pct ?? 0}%</div>
+              <div style={{ textAlign: "right", color: rk.color, fontWeight: 800 }}>{rk.name}</div>
+            </div>
+          );
+        })}
+        {leaderboard.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Daten.</div>}
+      </div>
+    </div>
+  );
+}
+
+function AdminView({ adminList, setEditing, removeQuestion, editing, onSaved, qStats, catStats, exportCSV }) {
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      {/* Editor */}
+      <AdminEditor editing={editing} onCancel={() => setEditing(null)} onSaved={onSaved} />
+
+      {/* Kategorie-Übersicht + Export */}
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontWeight: 700 }}>Kategorien (⌀-Accuracy)</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => exportCSV(catStats, [
+              { key: "category", label: "Kategorie" },
+              { key: "questions", label: "Fragen" },
+              { key: "avg_accuracy", label: "Ø Accuracy %" },
+            ], "kat_statistik.csv")}
+              style={{ padding: "8px 12px", background: ACCENT, color: "#111827", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
+              CSV Kategorien
+            </button>
+            <button onClick={() => exportCSV(qStats, [
+              { key: "id", label: "Frage-ID" },
+              { key: "category", label: "Kategorie" },
+              { key: "text", label: "Fragetext" },
+              { key: "seen", label: "gesehen" },
+              { key: "correct", label: "korrekt" },
+              { key: "accuracy", label: "Accuracy %" },
+            ], "fragen_statistik.csv")}
+              style={{ padding: "8px 12px", background: ACCENT, color: "#111827", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
+              CSV Fragen
+            </button>
+          </div>
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {catStats.map((c) => (
+            <div key={c.category} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ color: "#E5E7EB" }}>{c.category}</div>
+              <div style={{ color: "#CBD5E1" }}>{c.questions} Fragen</div>
+              <div style={{ color: "#E5E7EB" }}>{c.avg_accuracy}%</div>
+            </div>
+          ))}
+          {catStats.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
+        </div>
+      </div>
+
+      {/* Schwierigste Fragen */}
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Schwierigste Fragen (niedrigste Accuracy zuerst)</div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {qStats.slice(0, 20).map((q) => (
+            <div key={q.id} style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
+                <div style={{ color: "#E5E7EB" }}>{q.accuracy}%</div>
+              </div>
+              <div style={{ color: "#9CA3AF", marginTop: 2 }}>{q.category} · gesehen: {q.seen}, korrekt: {q.correct}</div>
+            </div>
+          ))}
+          {qStats.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Daten vorhanden.</div>}
+        </div>
+      </div>
+
+      {/* Fragenverwaltung */}
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Fragen (neueste zuerst)</div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {adminList.map((q) => (
+            <div key={q.id} style={{ border: `1px solid ${HILITE}`, borderRadius: 10, padding: 10, background: "#0B1220" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ color: "#9CA3AF" }}>{q.category}</span>
+                  <span style={{ color: "#9CA3AF" }}>{q.active ? "aktiv" : "inaktiv"}</span>
+                  <button onClick={() => setEditing(q)}
+                    style={{ padding: "6px 10px", background: "#1F2937", border: `1px solid ${HILITE}`, color: "#E5E7EB", borderRadius: 8, cursor: "pointer" }}>
+                    Bearbeiten
+                  </button>
+                  <button onClick={() => removeQuestion(q.id)}
+                    style={{ padding: "6px 10px", background: "#DC2626", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
+                    Löschen
+                  </button>
+                </div>
+              </div>
+              <div style={{ marginTop: 6, color: "#CBD5E1", fontSize: 14 }}>
+                {q.options?.map((o, i) => (
+                  <span key={i} style={{
+                    padding: "2px 8px", borderRadius: 999, marginRight: 6,
+                    border: `1px solid ${i === q.correct_idx ? "#16A34A" : HILITE}`, color: i === q.correct_idx ? "#16A34A" : "#CBD5E1"
+                  }}>
+                    {o}{i === q.correct_idx ? " ✔" : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {adminList.length === 0 && <div style={{ color: "#9CA3AF" }}>Keine Fragen gefunden.</div>}
+        </div>
       </div>
     </div>
   );
