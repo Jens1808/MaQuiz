@@ -1,0 +1,174 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "./supabaseClient";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+
+const CARD = "#111827D9";
+const HILITE = "#1F2937";
+
+export default function AdminDashboard({ user, role }) {
+  const [rows, setRows] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { if (role === "admin") { load(); } }, [role]);
+
+  async function load() {
+    setLoading(true); setMsg("");
+    try {
+      const [a1, a2] = await Promise.all([
+        supabase.from("attempts").select("id, user_id, email, score, total, created_at, details").order("created_at", { ascending: false }).limit(2000),
+        supabase.from("questions").select("id, text, category"),
+      ]);
+      if (a1.error) throw a1.error;
+      if (a2.error) throw a2.error;
+      setRows(a1.data || []);
+      setQuestions(a2.data || []);
+    } catch (e) {
+      setMsg(e.message);
+    } finally { setLoading(false); }
+  }
+
+  // Leaderboard (Durchschnitt pro Nutzer)
+  const byUser = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => {
+      const key = r.email || r.user_id;
+      const s = map.get(key) || { user: key, tries: 0, sumPct: 0, best: 0 };
+      const pct = Math.round((r.score / (r.total || 1)) * 100);
+      s.tries += 1; s.sumPct += pct; s.best = Math.max(s.best, pct);
+      map.set(key, s);
+    });
+    const arr = Array.from(map.values()).map(x => ({ ...x, avg: Math.round(x.sumPct / x.tries) }));
+    arr.sort((a, b) => b.avg - a.avg || b.best - a.best);
+    return arr.slice(0, 20);
+  }, [rows]);
+
+  // Schwierigste Fragen (niedrigste Accuracy über alle Attempts)
+  const qText = useMemo(() => Object.fromEntries(questions.map(q => [q.id, q.text])), [questions]);
+  const qCat  = useMemo(() => Object.fromEntries(questions.map(q => [q.id, q.category || "Allgemein"])), [questions]);
+
+  const hardQs = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => (r.details || []).forEach(d => {
+      const s = map.get(d.qid) || { qid: d.qid, ok: 0, total: 0 };
+      s.ok += d.ok ? 1 : 0; s.total += 1;
+      map.set(d.qid, s);
+    }));
+    const arr = Array.from(map.values())
+      .filter(x => x.total >= 3) // nur sinnvolle Stichprobe
+      .map(x => ({ qid: x.qid, text: qText[x.qid] || x.qid, category: qCat[x.qid] || "Allgemein", accuracy: Math.round((x.ok / x.total) * 100), total: x.total }))
+      .sort((a, b) => a.accuracy - b.accuracy || b.total - a.total)
+      .slice(0, 15);
+    return arr;
+  }, [rows, qText, qCat]);
+
+  // Kategorie-Übersicht (global)
+  const catAgg = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => (r.details || []).forEach(d => {
+      const c = d.category || "Allgemein";
+      const s = map.get(c) || { cat: c, ok: 0, total: 0 };
+      s.ok += d.ok ? 1 : 0; s.total += 1;
+      map.set(c, s);
+    }));
+    return Array.from(map.values()).map(x => ({ cat: x.cat, accuracy: x.total ? Math.round((x.ok / x.total) * 100) : 0 }));
+  }, [rows]);
+
+  async function resetAll() {
+    if (!window.confirm("ALLE Statistiken löschen?")) return;
+    const { error } = await supabase.from("attempts").delete().neq("id", ""); // alles
+    if (error) { alert(error.message); return; }
+    await load();
+  }
+
+  async function resetUser(email) {
+    if (!window.confirm(`Statistik von ${email} löschen?`)) return;
+    const { error } = await supabase.from("attempts").delete().eq("email", email);
+    if (error) { alert(error.message); return; }
+    await load();
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <b>Admin-Dashboard</b>
+          <button onClick={load} style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 8, border: `1px solid ${HILITE}`, background: "#0B1220", color: "white" }}>Neu laden</button>
+          <button onClick={resetAll} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#DC2626", color: "white" }}>Alle Statistiken zurücksetzen</button>
+        </div>
+      </div>
+
+      {/* Leaderboard */}
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+        <b>Leaderboard (Top 20 nach Durchschnitt)</b>
+        <div style={{ height: 340, marginTop: 12 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={byUser}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="user" />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="avg" name="Durchschnitt (%)" />
+              <Bar dataKey="best" name="Bestleistung (%)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+          {byUser.map(u => (
+            <div key={u.user} style={{ display: "grid", gridTemplateColumns: "1.5fr .6fr .6fr .6fr auto", gap: 8, background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ color: "#E5E7EB" }}>{u.user}</div>
+              <div style={{ color: "#CBD5E1" }}>{u.tries}×</div>
+              <div style={{ color: "#CBD5E1" }}>{u.avg}% Ø</div>
+              <div style={{ color: "#CBD5E1" }}>{u.best}% Best</div>
+              <button onClick={() => resetUser(u.user)} style={{ justifySelf: "end", padding: "4px 8px", borderRadius: 6, background: "#1F2937", border: "none", color: "white" }}>Reset</button>
+            </div>
+          ))}
+          {byUser.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Daten.</div>}
+        </div>
+      </div>
+
+      {/* Schwierigste Fragen */}
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+        <b>Schwierigste Fragen (niedrigste Genauigkeit)</b>
+        <div style={{ height: 340, marginTop: 12 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={hardQs}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="text" hide />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <Bar dataKey="accuracy" name="Richtig (%)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          {hardQs.map((q) => (
+            <div key={q.qid} style={{ background: "#0B1220", border: `1px solid ${HILITE}`, borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ color: "#E5E7EB", fontWeight: 600 }}>{q.text}</div>
+              <div style={{ color: "#9CA3AF" }}>Kategorie: {q.category} · Genauigkeit: {q.accuracy}% · Antworten: {q.total}</div>
+            </div>
+          ))}
+          {hardQs.length === 0 && <div style={{ color: "#9CA3AF" }}>Noch keine Daten.</div>}
+        </div>
+      </div>
+
+      {/* Kategorien gesamt */}
+      <div style={{ background: CARD, border: `1px solid ${HILITE}`, borderRadius: 12, padding: 14 }}>
+        <b>Kategorien – Gesamtgenauigkeit</b>
+        <div style={{ height: 320, marginTop: 12 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Tooltip />
+              <Legend />
+              <Pie dataKey="accuracy" nameKey="cat" data={catAgg} outerRadius={120} label />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {msg && <div style={{ color: "#F87171" }}>{msg}</div>}
+    </div>
+  );
+}
